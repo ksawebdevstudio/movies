@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -27,7 +27,8 @@ IMG = "https://image.tmdb.org/t/p/w342"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "index.html")
 
 HIDE_NON_IMAX_3D = True   # you only watch 3D in IMAX, so other 3D showtimes are dropped
-MAX_UPCOMING = 40
+MAX_UPCOMING = 12        # how many "coming soon" cards
+UPCOMING_DAYS = 28       # only releases within this many days from today
 
 # Order = display order on the cards.
 THEATERS = [
@@ -88,6 +89,9 @@ def parse_cinemark(data, today):
     for m in data:
         slug = m.get("movieSlug") or ""
         url = f"{CINEMARK_BASE}/movies/{slug}?showDate={today}"
+        poster = m.get("moviePosterUrl") or None
+        if poster and poster.startswith("/"):
+            poster = CINEMARK_BASE + poster
         for pt in m.get("showtimesByPrintType", []):
             name = (pt.get("printTypeName") or "").lower()
             imax = "imax" in name
@@ -97,7 +101,7 @@ def parse_cinemark(data, today):
                 ts = la(parse_utc(s["startTime"]))
                 if ts.strftime("%Y-%m-%d") == today:
                     out.append(dict(theater="cinemark", title=m.get("movieTitle", ""), ts=ts,
-                                    imax=imax, url=url, tmdb_id=None))
+                                    imax=imax, url=url, tmdb_id=None, poster=poster))
     return out
 
 
@@ -151,6 +155,8 @@ def parse_bigscreen(page_html, today, theater="regal", url=None):
         if not m or len(cell) < 2:
             continue
         title = html.unescape(m.group(1)).strip()
+        pm = re.search(r"MovieGraphics/thumbs/(\d+)\.jpg", row)
+        poster = f"https://www.bigscreenimages.com/Graphics/MovieGraphics/{pm.group(1)}.jpg" if pm else None
         # the cell is a sequence of groups: times..., then <span class="showcomment">attributes</span>
         for group in re.split(r'(?<=</span>)', cell[1]):
             c = re.search(r'class="showcomment">([^<]*)<', group)
@@ -167,7 +173,7 @@ def parse_bigscreen(page_html, today, theater="regal", url=None):
                 if suf == "a" and hour < 4:
                     continue  # after-midnight show, belongs to the next calendar day
                 ts = datetime.strptime(f"{today} {hour}:{mm}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
-                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None))
+                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None, poster=poster))
     return out
 
 
@@ -182,9 +188,12 @@ def parse_festival(data, today):
         if ts.strftime("%Y-%m-%d") != today:
             continue
         tid = mv.get("tmdbId")
+        pimg = mv.get("posterImage")
+        poster = (f"https://indy-systems.imgix.net/{pimg}?fit=crop&w=400&h=600&fm=jpeg&auto=format,compress"
+                  if pimg else None)
         out.append(dict(theater="festival", title=mv.get("name", ""), ts=ts, imax=False,
                         url=f"{FESTIVAL_BASE}/movie/{mv.get('urlSlug', '')}/",
-                        tmdb_id=int(tid) if tid and str(tid).isdigit() else None))
+                        tmdb_id=int(tid) if tid and str(tid).isdigit() else None, poster=poster))
     return out
 
 
@@ -212,7 +221,7 @@ def fetch_regal(today):
 
 def fetch_festival(today):
     query = ("query($date:String,$siteIds:[ID]){ showingsForDate(date:$date, siteIds:$siteIds)"
-             "{ data { time published private movie { name urlSlug tmdbId } } } }")
+             "{ data { time published private movie { name urlSlug tmdbId posterImage } } } }")
     raw = http(f"{FESTIVAL_BASE}/graphql",
                data={"query": query, "variables": {"date": today, "siteIds": [FESTIVAL_SITE_ID]}},
                headers={"Content-Type": "application/json", "site-id": FESTIVAL_SITE_ID,
@@ -280,11 +289,19 @@ def tmdb_by_title(title):
     if k not in _cache:
         found = None
         try:
-            res = tmdb("/search/movie", query=clean_title(title), include_adult="false")["results"]
-            res = [r for r in res if titles_match(title, r.get("title", "")) or
-                   titles_match(title, r.get("original_title", ""))]
-            if res:
-                found = max(res, key=lambda r: r.get("popularity", 0))
+            queries = [clean_title(title)]
+            alt = re.sub(r":?\s+part (one|1)$", "", queries[0], flags=re.I)
+            if alt != queries[0]:
+                queries.append(alt)
+            for q in queries:
+                res = tmdb("/search/movie", query=q, include_adult="false")["results"]
+                exact = [r for r in res if norm(q) in (norm(r.get("title", "")), norm(r.get("original_title", "")))]
+                loose = [r for r in res if titles_match(q, r.get("title", "")) or
+                         titles_match(q, r.get("original_title", ""))]
+                pick = exact or loose
+                if pick:
+                    found = max(pick, key=lambda r: r.get("popularity", 0))
+                    break
         except Exception as e:  # noqa: BLE001
             print(f"  TMDB search '{title}': {e}")
         _cache[k] = found
@@ -292,6 +309,17 @@ def tmdb_by_title(title):
 
 
 # ----------------------------------------------------------------- aggregation
+def sort_key(g):
+    """Best rated first. Ratings with few votes are pulled toward an average so that
+    '9.5 from 12 votes' does not outrank '8.2 from 3000 votes'. Unrated titles go last,
+    most popular first."""
+    v, r = g["votes"], g["rating"]
+    if v >= 10 and r > 0:
+        return (0, -((v * r + 50 * 6.5) / (v + 50)), g["title"])
+    return (1 if g["tmdb_id"] else 2, -g["pop"], g["title"])
+
+
+
 def build_movies(showings, use_tmdb):
     groups = {}
     for s in showings:
@@ -302,15 +330,22 @@ def build_movies(showings, use_tmdb):
                 info = tmdb_by_title(s["title"])
         key = ("tmdb", info["id"]) if info else ("t", norm(s["title"]))
         g = groups.setdefault(key, dict(title=(info or {}).get("title") or clean_title(s["title"]) or s["title"],
-                                        poster=(info or {}).get("poster_path"),
+                                        poster=(IMG + info["poster_path"]) if (info or {}).get("poster_path") else None,
+                                        alt_posters={},
                                         votes=(info or {}).get("vote_count", 0),
                                         rating=(info or {}).get("vote_average", 0),
                                         pop=(info or {}).get("popularity", 0),
                                         tmdb_id=(info or {}).get("id"),
                                         by_theater={}))
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s["imax"])] = s["url"]
+        if s.get("poster"):
+            g["alt_posters"].setdefault(s["theater"], s["poster"])
     movies = list(groups.values())
-    movies.sort(key=lambda g: (g["tmdb_id"] is None, -g["pop"], g["title"]))
+    for g in movies:  # no TMDB poster -> use the theater's own artwork
+        if not g["poster"]:
+            g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal")
+                                if k in g["alt_posters"]), None)
+    movies.sort(key=sort_key)
     return movies
 
 
@@ -321,7 +356,9 @@ def fmt_time(ts):
 
 def poster_html(g, i):
     if g["poster"]:
-        return f'<img src="{IMG}{g["poster"]}" alt="{html.escape(g["title"])} poster" loading="lazy">'
+        return (f'<img src="{html.escape(g["poster"])}" alt="{html.escape(g["title"])}" loading="lazy" '
+                f'onerror="var d=document.createElement(\'div\');d.className=\'poster\';'
+                f'd.textContent=this.alt;this.replaceWith(d)">')
     h = (i * 47) % 360
     return (f'<div class="poster" style="background:linear-gradient(160deg,hsl({h} 45% 30%),'
             f'hsl({h + 60} 45% 16%))"><span>{html.escape(g["title"])}</span></div>')
@@ -354,10 +391,10 @@ def now_card(g, i):
 def soon_card(m, i):
     title = m.get("title") or "Untitled"
     try:
-        d = datetime.strptime(m["release_date"], "%Y-%m-%d").strftime("%b %-d")
+        d = datetime.strptime(m.get("_date") or m["release_date"], "%Y-%m-%d").strftime("%b %-d")
     except (KeyError, ValueError):
         d = "TBA"
-    g = dict(title=title, poster=m.get("poster_path"))
+    g = dict(title=title, poster=(IMG + m["poster_path"]) if m.get("poster_path") else None)
     return (f'<article class="card soon">{poster_html(g, i + 30)}<span class="badge">{d}</span>'
             f'<div class="body"><h3>{html.escape(title)}</h3></div></article>')
 
@@ -368,14 +405,14 @@ CSS = """
 *{box-sizing:border-box}
 body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 header,main,footer{max-width:1100px;margin:0 auto;padding:16px}
-h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem}
+h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .sub{font-weight:400;font-size:.8rem}
 .sub{color:var(--mut);font-size:.9rem}
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
 @media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
 .card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--line)}
 .card img,.poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
-.poster{display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
+.poster{background:linear-gradient(160deg,#3a4a66,#1c2233);display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
 .body{padding:10px}
 h3{margin:0;font-size:.95rem;line-height:1.25}
 .meta{margin:4px 0 8px;font-size:.85rem}
@@ -437,12 +474,12 @@ def render(movies, soon, today, warnings, preview=False):
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>
-<h2>Now playing</h2>
+<h2>Now playing <span class="sub">&middot; best rated first</span></h2>
 <p class="empty" id="none" hidden>No more showings today.</p>
 <section class="grid">
 {now_html}
 </section>
-<h2>Coming soon</h2>
+<h2>Coming soon <span class="sub">&middot; next {UPCOMING_DAYS // 7} weeks, most anticipated first</span></h2>
 <section class="grid">
 {soon_html}
 </section>
@@ -453,17 +490,59 @@ def render(movies, soon, today, warnings, preview=False):
 
 
 # ------------------------------------------------------------------------ main
+def us_theatrical_date(movie_id, lo, hi):
+    """US theatrical date of a movie inside [lo, hi] (wide release preferred), or None."""
+    try:
+        data = tmdb(f"/movie/{movie_id}/release_dates")
+    except Exception:  # noqa: BLE001
+        return None
+    best = None
+    for c in data.get("results", []):
+        if c.get("iso_3166_1") != "US":
+            continue
+        for r in c.get("release_dates", []):
+            d = (r.get("release_date") or "")[:10]
+            if r.get("type") in (2, 3) and lo <= d <= hi:
+                rank = (0 if r["type"] == 3 else 1, d)
+                if best is None or rank < best:
+                    best = rank
+    return best[1] if best else None
+
+
 def get_soon(now_ids, today):
+    """Next few weeks of US theatrical releases, most anticipated (TMDB popularity) first."""
+    t0 = datetime.strptime(today, "%Y-%m-%d")
+    lo = (t0 + timedelta(days=1)).strftime("%Y-%m-%d")
+    hi = (t0 + timedelta(days=UPCOMING_DAYS)).strftime("%Y-%m-%d")
     results = []
-    for p in (1, 2, 3):
-        d = tmdb("/movie/upcoming", region="US", page=p)
-        results += d.get("results", [])
-        if p >= d.get("total_pages", 1):
+    try:
+        for p in (1, 2):
+            d = tmdb("/discover/movie", region="US", with_release_type="3", sort_by="popularity.desc",
+                     include_adult="false", page=p, **{"release_date.gte": lo, "release_date.lte": hi})
+            results += d.get("results", [])
+            if p >= d.get("total_pages", 1):
+                break
+    except Exception as e:  # noqa: BLE001
+        print(f"TMDB discover failed ({e}); using /movie/upcoming")
+    if not results:
+        for p in (1, 2, 3):
+            d = tmdb("/movie/upcoming", region="US", page=p)
+            results += [m for m in d.get("results", []) if lo <= (m.get("release_date") or "") <= hi]
+            if p >= d.get("total_pages", 1):
+                break
+    seen, soon = set(), []
+    for m in sorted(results, key=lambda m: -m.get("popularity", 0)):
+        if m["id"] in seen or m["id"] in now_ids or not m.get("poster_path"):
+            continue
+        seen.add(m["id"])
+        date = us_theatrical_date(m["id"], lo, hi)
+        if not date:
+            continue  # no confirmed US theatrical date in the window
+        m["_date"] = date
+        soon.append(m)
+        if len(soon) >= MAX_UPCOMING:
             break
-    soon = [m for m in results if m["id"] not in now_ids and (m.get("release_date") or "") > today
-            and m.get("poster_path")]
-    soon.sort(key=lambda m: m["release_date"])
-    return soon[:MAX_UPCOMING]
+    return soon
 
 
 def main():
