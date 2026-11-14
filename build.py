@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""Personal aggregator: what is playing TODAY in three Coachella Valley theaters
+(+ upcoming US releases). Data: the theaters' own websites, posters/ratings: TMDB.
+
+  TMDB_API_KEY=... python build.py     -> site/index.html
+  python build.py --mock               -> same, from built-in sample data (no network)
+
+Standard library only. Each theater is fetched independently: if one fails, the
+page is still built and shows a notice. If all three fail, the script exits with
+an error so the previously published page stays online.
+"""
+import html
+import json
+import os
+import re
+import sys
+import time
+import urllib.parse
+import urllib.request
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo("America/Los_Angeles")
+UA = "Mozilla/5.0 (compatible; PersonalShowtimesPage/1.0)"
+TMDB = "https://api.themoviedb.org/3"
+IMG = "https://image.tmdb.org/t/p/w342"
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "index.html")
+
+HIDE_NON_IMAX_3D = True   # you only watch 3D in IMAX, so other 3D showtimes are dropped
+MAX_UPCOMING = 40
+
+# Order = display order on the cards.
+THEATERS = [
+    ("festival", "Festival Theaters"),
+    ("cinemark", "Cinemark Century at the River + XD"),
+    ("regal", "Regal Rancho Mirage"),
+]
+THEATER_NAMES = dict(THEATERS)
+
+CINEMARK_ID = 479
+CINEMARK_BASE = "https://www.cinemark.com"
+REGAL_BASE = "https://www.regmovies.com"
+REGAL_THEATRE = f"{REGAL_BASE}/theatres/regal-rancho-mirage-1801"
+FESTIVAL_BASE = "https://festivaltheaters.com"
+FESTIVAL_SITE_ID = "177"
+FESTIVAL_CIRCUIT_ID = "106"
+
+
+# ---------------------------------------------------------------- http helpers
+def http(url, data=None, headers=None, tries=3):
+    h = {"User-Agent": UA, "Accept": "application/json, text/html;q=0.9"}
+    h.update(headers or {})
+    body = json.dumps(data).encode() if data is not None else None
+    last = None
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, data=body, headers=h)
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.read().decode("utf-8", "replace")
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(2 * (i + 1))
+    raise RuntimeError(f"{url}: {last}")
+
+
+def la(dt_utc):
+    return dt_utc.astimezone(TZ)
+
+
+def parse_utc(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+# ------------------------------------------------------------ theater parsers
+# Each parser returns a list of dicts:
+#   {theater, title, ts (aware datetime), imax (bool), url, tmdb_id (int|None)}
+
+def parse_cinemark(data, today):
+    out = []
+    for m in data:
+        slug = m.get("movieSlug") or ""
+        url = f"{CINEMARK_BASE}/movies/{slug}?showDate={today}"
+        for pt in m.get("showtimesByPrintType", []):
+            name = (pt.get("printTypeName") or "").lower()
+            imax = "imax" in name
+            if "3d" in name and not imax and HIDE_NON_IMAX_3D:
+                continue
+            for s in pt.get("showtimes", []):
+                ts = la(parse_utc(s["startTime"]))
+                if ts.strftime("%Y-%m-%d") == today:
+                    out.append(dict(theater="cinemark", title=m.get("movieTitle", ""), ts=ts,
+                                    imax=imax, url=url, tmdb_id=None))
+    return out
+
+
+def slugify(t):
+    return re.sub(r"[^a-z0-9]+", "-", t.lower()).strip("-")
+
+
+def parse_regal(page_html, today):
+    mm = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', page_html, re.S)
+    if not mm:
+        raise RuntimeError("Regal: __NEXT_DATA__ not found")
+    days = json.loads(mm.group(1))["props"]["pageProps"]["showtimes"]
+    links = {code: path for path, code in
+             re.findall(r'href="(/movies/[a-z0-9\-]*?-(ho\d+))"', page_html)}
+    out = []
+    for day in days:
+        if str(day.get("AdvertiseShowDate", ""))[:10] != today:
+            continue
+        for film in day.get("Film", []):
+            title = film.get("Title", "")
+            code = (film.get("MasterMovieCode") or "").lower()
+            path = links.get(code) or f"/movies/{slugify(title)}-{code}"
+            for p in film.get("Performances", []):
+                attrs = [a.lower() for a in p.get("PerformanceAttributes", [])]
+                imax = "imax" in attrs or title.upper().startswith("IMAX")
+                if "3d" in attrs and not imax and HIDE_NON_IMAX_3D:
+                    continue
+                naive = datetime.fromisoformat(p["CalendarShowTime"])
+                ts = naive.replace(tzinfo=TZ)
+                out.append(dict(theater="regal", title=title, ts=ts, imax=imax,
+                                url=REGAL_BASE + path, tmdb_id=None))
+    return out
+
+
+def parse_festival(data, today):
+    rows = (((data or {}).get("data") or {}).get("showingsForDate") or {}).get("data") or []
+    out = []
+    for s in rows:
+        if s.get("published") is False or s.get("private"):
+            continue
+        mv = s.get("movie") or {}
+        ts = la(parse_utc(s["time"]))
+        if ts.strftime("%Y-%m-%d") != today:
+            continue
+        tid = mv.get("tmdbId")
+        out.append(dict(theater="festival", title=mv.get("name", ""), ts=ts, imax=False,
+                        url=f"{FESTIVAL_BASE}/movie/{mv.get('urlSlug', '')}/",
+                        tmdb_id=int(tid) if tid and str(tid).isdigit() else None))
+    return out
+
+
+# --------------------------------------------------------------- live fetchers
+def fetch_cinemark(today):
+    q = urllib.parse.urlencode({"date": today, "timeZone": "America/Los_Angeles"})
+    return parse_cinemark(json.loads(http(f"{CINEMARK_BASE}/papi/theaters/{CINEMARK_ID}/showtimes?{q}")), today)
+
+
+def fetch_regal(today):
+    return parse_regal(http(REGAL_THEATRE), today)
+
+
+def fetch_festival(today):
+    query = ("query($date:String,$siteIds:[ID]){ showingsForDate(date:$date, siteIds:$siteIds)"
+             "{ data { time published private movie { name urlSlug tmdbId } } } }")
+    raw = http(f"{FESTIVAL_BASE}/graphql",
+               data={"query": query, "variables": {"date": today, "siteIds": [FESTIVAL_SITE_ID]}},
+               headers={"Content-Type": "application/json", "site-id": FESTIVAL_SITE_ID,
+                        "circuit-id": FESTIVAL_CIRCUIT_ID, "client-type": "consumer"})
+    data = json.loads(raw)
+    if data.get("errors"):
+        raise RuntimeError(f"Festival GraphQL: {data['errors'][0].get('message')}")
+    return parse_festival(data, today)
+
+
+# ------------------------------------------------------------------------ TMDB
+def tmdb(path, **params):
+    key = os.environ["TMDB_API_KEY"].strip()
+    params.setdefault("language", "en-US")
+    headers = {}
+    if key.startswith("eyJ"):
+        headers["Authorization"] = f"Bearer {key}"
+    else:
+        params["api_key"] = key
+    return json.loads(http(f"{TMDB}{path}?{urllib.parse.urlencode(params)}", headers=headers))
+
+
+def clean_title(t):
+    t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM)\s*:\s*", "", t.strip(), flags=re.I)
+    t = re.sub(r"\([^)]*\)", " ", t)
+    t = re.sub(r"\b(early access|reissue|encore|anniversary.*)$", " ", t, flags=re.I)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def norm(t):
+    return re.sub(r"[^a-z0-9]+", "", clean_title(t).lower())
+
+
+def titles_match(a, b):
+    a, b = norm(a), norm(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    s, l = sorted((a, b), key=len)
+    return len(s) >= 5 and l.startswith(s)
+
+
+_cache = {}
+
+
+def tmdb_by_id(i):
+    k = ("id", i)
+    if k not in _cache:
+        try:
+            _cache[k] = tmdb(f"/movie/{i}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  TMDB id {i}: {e}")
+            _cache[k] = None
+    return _cache[k]
+
+
+def tmdb_by_title(title):
+    k = ("t", norm(title))
+    if k not in _cache:
+        found = None
+        try:
+            res = tmdb("/search/movie", query=clean_title(title), include_adult="false")["results"]
+            res = [r for r in res if titles_match(title, r.get("title", "")) or
+                   titles_match(title, r.get("original_title", ""))]
+            if res:
+                found = max(res, key=lambda r: r.get("popularity", 0))
+        except Exception as e:  # noqa: BLE001
+            print(f"  TMDB search '{title}': {e}")
+        _cache[k] = found
+    return _cache[k]
+
+
+# ----------------------------------------------------------------- aggregation
+def build_movies(showings, use_tmdb):
+    groups = {}
+    for s in showings:
+        info = None
+        if use_tmdb:
+            info = tmdb_by_id(s["tmdb_id"]) if s["tmdb_id"] else tmdb_by_title(s["title"])
+            if info is None and s["tmdb_id"]:
+                info = tmdb_by_title(s["title"])
+        key = ("tmdb", info["id"]) if info else ("t", norm(s["title"]))
+        g = groups.setdefault(key, dict(title=(info or {}).get("title") or clean_title(s["title"]) or s["title"],
+                                        poster=(info or {}).get("poster_path"),
+                                        votes=(info or {}).get("vote_count", 0),
+                                        rating=(info or {}).get("vote_average", 0),
+                                        pop=(info or {}).get("popularity", 0),
+                                        tmdb_id=(info or {}).get("id"),
+                                        by_theater={}))
+        g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s["imax"])] = s["url"]
+    movies = list(groups.values())
+    movies.sort(key=lambda g: (g["tmdb_id"] is None, -g["pop"], g["title"]))
+    return movies
+
+
+# ------------------------------------------------------------------- rendering
+def fmt_time(ts):
+    return ts.strftime("%-I:%M %p")
+
+
+def poster_html(g, i):
+    if g["poster"]:
+        return f'<img src="{IMG}{g["poster"]}" alt="{html.escape(g["title"])} poster" loading="lazy">'
+    h = (i * 47) % 360
+    return (f'<div class="poster" style="background:linear-gradient(160deg,hsl({h} 45% 30%),'
+            f'hsl({h + 60} 45% 16%))"><span>{html.escape(g["title"])}</span></div>')
+
+
+def now_card(g, i):
+    if g["votes"] >= 10 and g["rating"] > 0:
+        rating = f'<span class="rating">&#9733; {g["rating"]:.1f}</span>'
+    else:
+        rating = '<span class="rating none">No ratings yet</span>'
+    rows = ""
+    for key, name in THEATERS:
+        shows = g["by_theater"].get(key)
+        if not shows:
+            continue
+        items = sorted(shows.items())
+        first_url = items[0][1]
+        chips = ""
+        for (ts, imax), url in items:
+            tag = "<b>IMAX</b> " if imax else ""
+            cls = "t imax" if imax else "t"
+            chips += (f'<a class="{cls}" data-ts="{int(ts.timestamp())}" href="{html.escape(url)}" '
+                      f'target="_blank" rel="noopener">{tag}{fmt_time(ts)}</a>')
+        rows += (f'<div class="th"><a class="thn" href="{html.escape(first_url)}" target="_blank" rel="noopener">'
+                 f'{html.escape(name)}<i>&#8599;</i></a><div class="times">{chips}</div></div>')
+    return (f'<article class="card now">{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
+            f'<div class="meta">{rating}</div>{rows}</div></article>')
+
+
+def soon_card(m, i):
+    title = m.get("title") or "Untitled"
+    try:
+        d = datetime.strptime(m["release_date"], "%Y-%m-%d").strftime("%b %-d")
+    except (KeyError, ValueError):
+        d = "TBA"
+    g = dict(title=title, poster=m.get("poster_path"))
+    return (f'<article class="card soon">{poster_html(g, i + 30)}<span class="badge">{d}</span>'
+            f'<div class="body"><h3>{html.escape(title)}</h3></div></article>')
+
+
+CSS = """
+:root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--acc:#f5b301;--chip:#262b36}
+@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--acc:#b97d00;--chip:#eef0f4}}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+header,main,footer{max-width:1100px;margin:0 auto;padding:16px}
+h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem}
+.sub{color:var(--mut);font-size:.9rem}
+.notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+@media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
+.card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--line)}
+.card img,.poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
+.poster{display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
+.body{padding:10px}
+h3{margin:0;font-size:.95rem;line-height:1.25}
+.meta{margin:4px 0 8px;font-size:.85rem}
+.rating{color:var(--acc);font-weight:600} .rating.none{color:var(--mut);font-weight:400}
+.th{padding:8px 0;border-top:1px solid var(--line)}
+.thn{display:flex;justify-content:space-between;gap:6px;font-size:.78rem;font-weight:600;color:var(--fg);text-decoration:none;line-height:1.2}
+.thn i{font-style:normal;color:var(--mut)} .thn:hover{color:var(--acc)}
+.times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.t:hover{background:var(--acc);color:#111}
+.t.imax{border:1px solid var(--acc)} .t.imax b{color:var(--acc);font-size:.68rem;letter-spacing:.03em}
+.t.imax:hover b{color:#111}
+.soon .body{padding:8px 10px 10px}
+.badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
+.empty{color:var(--mut)}
+footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
+[hidden]{display:none!important}
+"""
+
+JS = """
+(function(){
+  if(document.body.dataset.preview) return;
+  var fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'});
+  var stale=fmt.format(new Date())!==document.body.dataset.date;
+  if(stale){document.getElementById('stale').hidden=false;}
+  else{
+    var now=Date.now()/1000;
+    document.querySelectorAll('.t').forEach(function(a){ if(+a.dataset.ts<now) a.hidden=true; });
+    document.querySelectorAll('.th').forEach(function(r){ if(!r.querySelector('.t:not([hidden])')) r.hidden=true; });
+    document.querySelectorAll('.card.now').forEach(function(c){ if(!c.querySelector('.th:not([hidden])')) c.hidden=true; });
+  }
+  if(!document.querySelector('.card.now:not([hidden])')) document.getElementById('none').hidden=false;
+})();
+"""
+
+
+def render(movies, soon, today, warnings, preview=False):
+    now_html = "\n".join(now_card(g, i) for i, g in enumerate(movies))
+    soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
+    nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
+    updated = datetime.now(TZ).strftime("%b %-d, %-I:%M %p %Z")
+    warn = "".join(f'<div class="notice">Could not update: {html.escape(w)}. Showing the rest.</div>' for w in warnings)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In Theaters - Coachella Valley</title>
+<style>{CSS}</style></head>
+<body data-date="{today}"{' data-preview="1"' if preview else ''}>
+<header><h1>In Theaters</h1><div class="sub">Today, {nice_today} &middot; updated {updated}</div></header>
+{warn}
+<div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
+<main>
+<h2>Now playing</h2>
+<p class="empty" id="none" hidden>No more showings today.</p>
+<section class="grid">
+{now_html}
+</section>
+<h2>Coming soon</h2>
+<section class="grid">
+{soon_html}
+</section>
+</main>
+<footer>Showtimes come from the theaters' own websites and can change; tap a time to open that movie on the theater's site. This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</footer>
+<script>{JS}</script>
+</body></html>"""
+
+
+# ------------------------------------------------------------------------ main
+def get_soon(now_ids, today):
+    results = []
+    for p in (1, 2, 3):
+        d = tmdb("/movie/upcoming", region="US", page=p)
+        results += d.get("results", [])
+        if p >= d.get("total_pages", 1):
+            break
+    soon = [m for m in results if m["id"] not in now_ids and (m.get("release_date") or "") > today
+            and m.get("poster_path")]
+    soon.sort(key=lambda m: m["release_date"])
+    return soon[:MAX_UPCOMING]
+
+
+def main():
+    mock = "--mock" in sys.argv
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    showings, warnings = [], []
+
+    if mock:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import mock_data
+        today = mock_data.TODAY
+        showings = (parse_festival(mock_data.FESTIVAL, today) + parse_cinemark(mock_data.CINEMARK, today)
+                    + parse_regal(mock_data.REGAL_HTML, today))
+        soon = mock_data.SOON
+        use_tmdb = False
+    else:
+        if not os.environ.get("TMDB_API_KEY"):
+            sys.exit("TMDB_API_KEY is not set")
+        use_tmdb = True
+        for key, fn in (("festival", fetch_festival), ("cinemark", fetch_cinemark), ("regal", fetch_regal)):
+            try:
+                got = fn(today)
+                print(f"{THEATER_NAMES[key]}: {len(got)} showtimes today")
+                showings += got
+            except Exception as e:  # noqa: BLE001
+                print(f"{THEATER_NAMES[key]}: FAILED - {e}")
+                warnings.append(THEATER_NAMES[key])
+        if len(warnings) == len(THEATERS):
+            sys.exit("All theaters failed; keeping the previously published page.")
+
+    movies = build_movies(showings, use_tmdb)
+    if use_tmdb:
+        try:
+            soon = get_soon({g["tmdb_id"] for g in movies if g["tmdb_id"]}, today)
+        except Exception as e:  # noqa: BLE001
+            print(f"TMDB upcoming failed: {e}")
+            soon = []
+
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    with open(OUT, "w", encoding="utf-8") as f:
+        f.write(render(movies, soon, today, warnings, preview=mock))
+    print(f"OK: {len(movies)} movies today, {len(soon)} upcoming -> {OUT}")
+
+
+if __name__ == "__main__":
+    main()
