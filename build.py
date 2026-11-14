@@ -100,7 +100,8 @@ def slugify(t):
 def parse_regal(page_html, today):
     mm = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', page_html, re.S)
     if not mm:
-        raise RuntimeError("Regal: __NEXT_DATA__ not found")
+        t = re.search(r"<title[^>]*>(.*?)</title>", page_html, re.S | re.I)
+        raise RuntimeError(f"Regal: __NEXT_DATA__ not found (page title: {t.group(1).strip()[:80] if t else 'none'}, {len(page_html)} bytes)")
     days = json.loads(mm.group(1))["props"]["pageProps"]["showtimes"]
     links = {code: path for path, code in
              re.findall(r'href="(/movies/[a-z0-9\-]*?-(ho\d+))"', page_html)}
@@ -353,7 +354,8 @@ def render(movies, soon, today, warnings, preview=False):
     soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
     nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
     updated = datetime.now(TZ).strftime("%b %-d, %-I:%M %p %Z")
-    warn = "".join(f'<div class="notice">Could not update: {html.escape(w)}. Showing the rest.</div>' for w in warnings)
+    warn = "".join(f'<div class="notice">Could not update {html.escape(n)} ({html.escape(r[:160])}). Showing the rest.</div>'
+                   for n, r in warnings)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -417,7 +419,7 @@ def main():
                 showings += got
             except Exception as e:  # noqa: BLE001
                 print(f"{THEATER_NAMES[key]}: FAILED - {e}")
-                warnings.append(THEATER_NAMES[key])
+                warnings.append((THEATER_NAMES[key], str(e)))
         if len(warnings) == len(THEATERS):
             sys.exit("All theaters failed; keeping the previously published page.")
 
@@ -429,6 +431,10 @@ def main():
             print(f"TMDB upcoming failed: {e}")
             soon = []
 
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary and warnings:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write("### Theaters that failed\n" + "".join(f"- **{n}**: `{r[:300]}`\n" for n, r in warnings))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(movies, soon, today, warnings, preview=mock))
