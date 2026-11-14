@@ -36,11 +36,19 @@ THEATERS = [
     ("regal", "Regal Rancho Mirage"),
 ]
 THEATER_NAMES = dict(THEATERS)
+# Where the "open showtimes" link goes when a theater could not be read.
+THEATER_URLS = {
+    "festival": "https://festivaltheaters.com/buy-tickets/",
+    "cinemark": "https://www.cinemark.com/theatres/ca-rancho-mirage/cinemark-century-at-the-river-and-xd",
+    "regal": "https://www.regmovies.com/theatres/regal-rancho-mirage-1801",
+}
+NOTES = []  # extra footer lines (e.g. which backup source was used)
 
 CINEMARK_ID = 479
 CINEMARK_BASE = "https://www.cinemark.com"
 REGAL_BASE = "https://www.regmovies.com"
 REGAL_THEATRE = f"{REGAL_BASE}/theatres/regal-rancho-mirage-1801"
+BIGSCREEN_REGAL = "https://www.bigscreen.com/Marquee.php?theater=6355&view=sched&showdate={date}"
 FESTIVAL_BASE = "https://festivaltheaters.com"
 FESTIVAL_SITE_ID = "177"
 FESTIVAL_CIRCUIT_ID = "106"
@@ -125,6 +133,44 @@ def parse_regal(page_html, today):
     return out
 
 
+def parse_bigscreen(page_html, today, theater="regal", url=None):
+    """BigScreen Cinema Guide theater schedule (plain HTML). Used as a backup for Regal."""
+    url = url or THEATER_URLS[theater]
+    rows = re.findall(r'<tr class="graybar_\d">(.*?)</tr>', page_html, re.S)
+    if not rows:
+        t = re.search(r"<title[^>]*>(.*?)</title>", page_html, re.S | re.I)
+        raise RuntimeError(f"BigScreen: no schedule rows (page title: {t.group(1).strip()[:80] if t else 'none'})")
+    want = datetime.strptime(today, "%Y-%m-%d").strftime("%B %-d, %Y")
+    head = re.search(r"Showtimes on \w+, ([A-Z][a-z]+ \d{1,2}, \d{4})", page_html)
+    if not head or head.group(1) != want:
+        raise RuntimeError(f"BigScreen: page is for '{head.group(1) if head else 'unknown date'}', wanted {want}")
+    out = []
+    for row in rows:
+        m = re.search(r'class="movieNameList">([^<]+)<', row)
+        cell = row.split('class="col_showtimes"', 1)
+        if not m or len(cell) < 2:
+            continue
+        title = html.unescape(m.group(1)).strip()
+        # the cell is a sequence of groups: times..., then <span class="showcomment">attributes</span>
+        for group in re.split(r'(?<=</span>)', cell[1]):
+            c = re.search(r'class="showcomment">([^<]*)<', group)
+            attrs = (c.group(1) if c else "").lower()
+            imax = "imax" in attrs or "imax" in title.lower()
+            is3d = "3d projection" in attrs or re.search(r"\b3d\b", title, re.I)
+            if is3d and not imax and HIDE_NON_IMAX_3D:
+                continue
+            # times are plain text like "10:50a, 1:40, 3:30" ("a" = AM, everything else PM); some are links
+            text = group.split('class="showcomment"')[0]
+            text = re.sub(r"<!--.*?-->|<div.*?</div>|<[^>]+>", " ", text, flags=re.S)
+            for hh, mm, suf in re.findall(r"(?<![\d:])(\d{1,2}):(\d\d)([ap])?(?![\d:])", text):
+                hour = int(hh) % 12 + (0 if suf == "a" else 12)
+                if suf == "a" and hour < 4:
+                    continue  # after-midnight show, belongs to the next calendar day
+                ts = datetime.strptime(f"{today} {hour}:{mm}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
+                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None))
+    return out
+
+
 def parse_festival(data, today):
     rows = (((data or {}).get("data") or {}).get("showingsForDate") or {}).get("data") or []
     out = []
@@ -149,7 +195,19 @@ def fetch_cinemark(today):
 
 
 def fetch_regal(today):
-    return parse_regal(http(REGAL_THEATRE), today)
+    """Regal's own site first; if it refuses this server, use BigScreen's listing for the same theater."""
+    try:
+        return parse_regal(http(REGAL_THEATRE, tries=2), today)
+    except Exception as e1:  # noqa: BLE001
+        print(f"  Regal official site failed ({e1}); trying BigScreen")
+        try:
+            got = parse_bigscreen(http(BIGSCREEN_REGAL.format(date=today), tries=2), today)
+        except Exception as e2:  # noqa: BLE001
+            raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: {e2}") from None
+        if not got:
+            raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {today}")
+        NOTES.append("Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page.")
+        return got
 
 
 def fetch_festival(today):
@@ -180,6 +238,11 @@ def tmdb(path, **params):
 def clean_title(t):
     t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM)\s*:\s*", "", t.strip(), flags=re.I)
     t = re.sub(r"\([^)]*\)", " ", t)
+    suffix = (r"\s+-\s+(the imax experience|sensory friendly|open caption\w*|(\d{4}\s+)?re-?issue(\s+\d{4})?"
+              r"|\d+(st|nd|rd|th)\s+anniversary.*|early access.*|fan event.*)\s*$")
+    for _ in range(3):
+        t = re.sub(suffix, "", t, flags=re.I)
+    t = re.sub(r"\s+in 3d\s*$", "", t, flags=re.I)
     t = re.sub(r"\b(early access|reissue|encore|anniversary.*)$", " ", t, flags=re.I)
     return re.sub(r"\s+", " ", t).strip()
 
@@ -327,6 +390,10 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .t.imax:hover b{color:#111}
 .soon .body{padding:8px 10px 10px}
 .badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
+.fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
+@media (max-width:1100px){.fallback{margin:8px 16px}}
+.fallback small{display:block;color:var(--mut);font-size:.78rem}
+.fallback em{font-style:normal;white-space:nowrap;background:var(--acc);color:#111;font-weight:600;font-size:.85rem;padding:6px 12px;border-radius:999px}
 .empty{color:var(--mut)}
 footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
 [hidden]{display:none!important}
@@ -354,8 +421,12 @@ def render(movies, soon, today, warnings, preview=False):
     soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
     nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
     updated = datetime.now(TZ).strftime("%b %-d, %-I:%M %p %Z")
-    warn = "".join(f'<div class="notice">Could not update {html.escape(n)} ({html.escape(r[:160])}). Showing the rest.</div>'
-                   for n, r in warnings)
+    warn = "".join(
+        f'<a class="fallback" href="{html.escape(THEATER_URLS[k])}" target="_blank" rel="noopener" '
+        f'title="{html.escape(r[:300])}"><span><b>{html.escape(THEATER_NAMES[k])}</b>'
+        f'<small>Showtimes could not be loaded here right now</small></span>'
+        f'<em>Open showtimes &#8599;</em></a>' for k, r in warnings)
+    notes = "".join(f" {html.escape(n)}" for n in NOTES)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -376,7 +447,7 @@ def render(movies, soon, today, warnings, preview=False):
 {soon_html}
 </section>
 </main>
-<footer>Showtimes come from the theaters' own websites and can change; tap a time to open that movie on the theater's site. This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</footer>
+<footer>Showtimes come from the theaters' own websites and can change; tap a time to open that movie on the theater's site.{notes} This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</footer>
 <script>{JS}</script>
 </body></html>"""
 
@@ -419,7 +490,7 @@ def main():
                 showings += got
             except Exception as e:  # noqa: BLE001
                 print(f"{THEATER_NAMES[key]}: FAILED - {e}")
-                warnings.append((THEATER_NAMES[key], str(e)))
+                warnings.append((key, str(e)))
         if len(warnings) == len(THEATERS):
             sys.exit("All theaters failed; keeping the previously published page.")
 
@@ -434,7 +505,7 @@ def main():
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary and warnings:
         with open(summary, "a", encoding="utf-8") as f:
-            f.write("### Theaters that failed\n" + "".join(f"- **{n}**: `{r[:300]}`\n" for n, r in warnings))
+            f.write("### Theaters that failed\n" + "".join(f"- **{THEATER_NAMES[k]}**: `{r[:400]}`\n" for k, r in warnings))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(movies, soon, today, warnings, preview=mock))
