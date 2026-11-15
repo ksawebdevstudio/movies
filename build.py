@@ -813,7 +813,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .plab{position:absolute;top:8px;left:8px;z-index:1;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
   border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 .plab i{font-style:normal;font-weight:500;opacity:.8}
-.badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
+.badge{position:absolute;top:8px;left:8px;background:#f5b301;color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
 .fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
 @media (max-width:1100px){.fallback{margin:8px 16px}}
 .fallback small{display:block;color:var(--mut);font-size:.78rem}
