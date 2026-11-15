@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Personal aggregator: what is playing TODAY in three Coachella Valley theaters
+"""Personal aggregator: what is playing TODAY in four Coachella Valley theaters
 (+ upcoming US releases). Data: the theaters' own websites, posters/ratings: TMDB.
 
   TMDB_API_KEY=... python build.py     -> site/index.html
   python build.py --mock               -> same, from built-in sample data (no network)
 
 Standard library only. Each theater is fetched independently: if one fails, the
-page is still built and shows a notice. If all three fail, the script exits with
+page is still built and shows a notice. If all of them fail, the script exits with
 an error so the previously published page stays online.
 """
 import base64
@@ -20,6 +20,7 @@ import time
 import urllib.parse
 import urllib.error
 import urllib.request
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -42,19 +43,22 @@ THEATERS = [
     ("festival", "Festival Theaters"),
     ("cinemark", "Cinemark Century at the River + XD"),
     ("regal", "Regal Rancho Mirage"),
+    ("pickford", "Mary Pickford Theatre"),
 ]
 THEATER_NAMES = dict(THEATERS)
-SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal"}  # used on phones
+SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal", "pickford": "Mary Pickford"}  # used on phones
 # Where the "open showtimes" link goes when a theater could not be read.
 THEATER_URLS = {
     "festival": "https://festivaltheaters.com/buy-tickets/",
     "cinemark": "https://www.cinemark.com/theatres/ca-rancho-mirage/cinemark-century-at-the-river-and-xd",
     "regal": "https://www.regmovies.com/theatres/regal-rancho-mirage-1801",
+    "pickford": "https://www.dplaceentertainment.com/california/cathedral-city/0000000673/showtimes",
 }
 THEATER_ADDR = {
     "festival": "789 E Tahquitz Canyon Way, Palm Springs",
     "cinemark": "71800 Hwy 111, Suite A-137, Rancho Mirage",
     "regal": "72-777 Dinah Shore Dr, Rancho Mirage",
+    "pickford": "36850 Pickfair St, Cathedral City",
 }
 TMDB_GENRES = {28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
                18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
@@ -67,6 +71,11 @@ CINEMARK_BASE = "https://www.cinemark.com"
 REGAL_BASE = "https://www.regmovies.com"
 REGAL_THEATRE = f"{REGAL_BASE}/theatres/regal-rancho-mirage-1801"
 BIGSCREEN_REGAL = "https://www.bigscreen.com/Marquee.php?theater=6355&view=sched&showdate={date}"
+# Mary Pickford: BigScreen is the main source (it marks D-BOX showings and already works from GitHub);
+# the theater's own D'Place page gives direct movie links, a cross-check and a backup.
+BIGSCREEN_PICKFORD = "https://www.bigscreen.com/Marquee.php?theater=7873&view=sched&showdate={date}"
+DPLACE_BASE = "https://www.dplaceentertainment.com"
+DPLACE_THEATRE_ID = "0000000673"
 FESTIVAL_BASE = "https://festivaltheaters.com"
 FESTIVAL_SITE_ID = "177"
 FESTIVAL_CIRCUIT_ID = "106"
@@ -118,7 +127,14 @@ def parse_utc(s):
 
 # ------------------------------------------------------------ theater parsers
 # Each parser returns a list of dicts:
-#   {theater, title, ts (aware datetime), imax (bool), url, tmdb_id (int|None)}
+#   {theater, title, ts (aware datetime), fmt ("" | "IMAX" | "D-BOX"), url, tmdb_id (int|None)}
+
+def fmt_of(attrs, imax):
+    """The one format worth a tag on a showtime: IMAX, else D-BOX (motion seats), else nothing."""
+    if imax:
+        return "IMAX"
+    return "D-BOX" if re.search(r"d-?\s?box", attrs, re.I) else ""
+
 
 def parse_cinemark(data, today):
     out = []
@@ -139,7 +155,7 @@ def parse_cinemark(data, today):
                 ts = la(parse_utc(s["startTime"]))
                 if ts.strftime("%Y-%m-%d") == today:
                     out.append(dict(theater="cinemark", title=m.get("movieTitle", ""), ts=ts,
-                                    imax=imax, url=url, tmdb_id=None, poster=poster, rt=rt, genre=genre))
+                                    fmt=fmt_of(name, imax), url=url, tmdb_id=None, poster=poster, rt=rt, genre=genre))
     return out
 
 
@@ -170,13 +186,13 @@ def parse_regal(page_html, today):
                     continue
                 naive = datetime.fromisoformat(p["CalendarShowTime"])
                 ts = naive.replace(tzinfo=TZ)
-                out.append(dict(theater="regal", title=title, ts=ts, imax=imax,
+                out.append(dict(theater="regal", title=title, ts=ts, fmt=fmt_of(" ".join(attrs), imax),
                                 url=REGAL_BASE + path, tmdb_id=None))
     return out
 
 
 def parse_bigscreen(page_html, today, theater="regal", url=None):
-    """BigScreen Cinema Guide theater schedule (plain HTML). Used as a backup for Regal."""
+    """BigScreen Cinema Guide theater schedule (plain HTML): backup for Regal, main source for Mary Pickford."""
     url = url or THEATER_URLS[theater]
     rows = re.findall(r'<tr class="graybar_\d">(.*?)</tr>', page_html, re.S)
     if not rows:
@@ -215,7 +231,7 @@ def parse_bigscreen(page_html, today, theater="regal", url=None):
                 if suf == "a" and hour < 4:
                     continue  # after-midnight show, belongs to the next calendar day
                 ts = datetime.strptime(f"{today} {hour}:{mm}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
-                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None,
+                out.append(dict(theater=theater, title=title, ts=ts, fmt=fmt_of(attrs, imax), url=url, tmdb_id=None,
                                 poster=poster, year=year, rt=rt))
     return out
 
@@ -234,7 +250,7 @@ def parse_festival(data, today):
         pimg = mv.get("posterImage")
         poster = (f"https://indy-systems.imgix.net/{pimg}?fit=crop&w=400&h=600&fm=jpeg&auto=format,compress"
                   if pimg else None)
-        out.append(dict(theater="festival", title=mv.get("name", ""), ts=ts, imax=False,
+        out.append(dict(theater="festival", title=mv.get("name", ""), ts=ts, fmt="",
                         url=f"{FESTIVAL_BASE}/movie/{mv.get('urlSlug', '')}/",
                         tmdb_id=int(tid) if tid and str(tid).isdigit() else None, poster=poster,
                         rt=mv.get("duration") or None, genre=mv.get("genre") or None))
@@ -284,6 +300,140 @@ def fetch_festival(today):
     return parse_festival(data, today)
 
 
+def fetch_pickford(day):
+    got = parse_bigscreen(http(BIGSCREEN_PICKFORD.format(date=day), tries=2), day, theater="pickford")
+    if not got:
+        raise RuntimeError(f"bigscreen.com: page loaded but no showtimes for {day}")
+    return got
+
+
+def _strip(h):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", h))).strip()
+
+
+def _walk(o):
+    if isinstance(o, dict):
+        yield o
+        for v in o.values():
+            yield from _walk(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _walk(v)
+
+
+def parse_dplace(page_html):
+    """Mary Pickford's own showtimes page (six days on one page). Returns
+    {"links": {norm title: movie page url}, "days": {date: [(title, ts)]}, "how": how the times were read}.
+    The times are read two ways (schema.org events, else the visible day sections); "days" stays
+    empty when neither matches, so a redesign of the site can never put wrong times on the page."""
+    links, days, how = {}, {}, ""
+
+    def add_link(title, url):
+        if title and url and f"/{DPLACE_THEATRE_ID}/movies/" in url:
+            links.setdefault(norm(title), urllib.parse.urljoin(DPLACE_BASE, url))
+
+    # 1) movie links: <a href=".../0000000673/movies/<slug>">Title or <img alt="Title"></a>
+    for href, slug, inner in re.findall(
+            rf'<a\b[^>]*href="([^"]*/{DPLACE_THEATRE_ID}/movies/([^"/?#]+)[^"]*)"[^>]*>(.*?)</a>', page_html, re.S):
+        alt = re.search(r'alt="([^"]+)"', inner)
+        add_link(_strip(inner) or (html.unescape(alt.group(1)) if alt else ""), href)
+        add_link(slug.replace("-", " "), href)
+
+    # 2a) schema.org events: {"@type": "ScreeningEvent", "name": "X at Mary Pickford...", "startDate": "...-08:00"}
+    for block in re.findall(r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', page_html, re.S | re.I):
+        try:
+            data = json.loads(block.strip())
+        except ValueError:
+            continue
+        for o in _walk(data):
+            sd = o.get("startDate")
+            if not isinstance(sd, str) or not re.match(r"\d{4}-\d\d-\d\dT\d\d:\d\d", sd):
+                continue
+            work = o.get("workPresented") if isinstance(o.get("workPresented"), dict) else {}
+            title = work.get("name") or re.sub(r"\s+at\s+(the\s+)?Mary Pickford.*$", "", str(o.get("name", "")), flags=re.I)
+            try:
+                ts = datetime.fromisoformat(sd)
+                ts = ts.replace(tzinfo=TZ) if ts.tzinfo is None else ts.astimezone(TZ)
+            except ValueError:
+                continue
+            if title:
+                days.setdefault(ts.strftime("%Y-%m-%d"), []).append((html.unescape(title), ts))
+                add_link(title, work.get("url") or o.get("url") or "")
+    if days:
+        how = "schema.org events"
+
+    # 2b) visible sections: id="day-YYYY-MM-DD" ... movie link (title) ... ticket links "9:10 PM"
+    if not days:
+        marks = [(m.start(), m.group(1)) for m in re.finditer(r'id="day-(\d{4}-\d\d-\d\d)"', page_html)]
+        tok = re.compile(rf'<a\b[^>]*href="[^"]*/{DPLACE_THEATRE_ID}/movies/([^"/?#]+)[^"]*"[^>]*>(.*?)</a>'
+                         r'|<a\b[^>]*href="[^"]*/Tickets/[^"]*"[^>]*>(.*?)</a>', re.S)
+        for i, (pos, day) in enumerate(marks):
+            seg = page_html[pos: marks[i + 1][0] if i + 1 < len(marks) else len(page_html)]
+            title = None
+            for slug, inner, tick in tok.findall(seg):
+                if slug:
+                    alt = re.search(r'alt="([^"]+)"', inner)
+                    title = _strip(inner) or (html.unescape(alt.group(1)) if alt else "") or title or slug.replace("-", " ")
+                    continue
+                tm = re.search(r"(\d{1,2}):(\d\d)\s*([AaPp])\.?[Mm]", _strip(tick))
+                if title and tm:
+                    hour = int(tm.group(1)) % 12 + (12 if tm.group(3).lower() == "p" else 0)
+                    ts = datetime.strptime(f"{day} {hour}:{tm.group(2)}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
+                    days.setdefault(day, []).append((title, ts))
+        if days:
+            how = "day sections"
+    return {"links": links, "days": days, "how": how}
+
+
+def fetch_dplace(_=None):
+    return parse_dplace(http(THEATER_URLS["pickford"], tries=2))
+
+
+def dplace_url(title, links):
+    for k, u in links.items():
+        if titles_match(k, title):
+            return u
+    return None
+
+
+def apply_dplace(results, dp, dp_err, days, problems):
+    """Mary Pickford: direct movie links from D'Place, a BigScreen-vs-D'Place check, and D'Place as the
+    backup source when BigScreen fails. D'Place being unreachable never fails the run (links then
+    go to the theater's showtimes page); a real disagreement between the two sources does."""
+    if dp_err or not dp:
+        print(f"  D'Place: not available ({dp_err}); Mary Pickford links go to the showtimes page")
+        step_summary(f"D'Place site not available from GitHub ({str(dp_err)[:200]}) - Mary Pickford uses BigScreen only.")
+        return
+    print(f"  D'Place: {len(dp['links'])} movie links, times read via {dp['how'] or 'nothing (layout not recognised)'}: "
+          + ", ".join(f"{d} {len(v)}" for d, v in sorted(dp["days"].items())))
+    if not dp["how"]:
+        step_summary("D'Place: showtimes layout not recognised - no cross-check / backup for Mary Pickford.")
+    for day in days:
+        got, err = results[("pickford", day)]
+        theirs = dp["days"].get(day, [])
+        if err and len(theirs) >= MIN_SHOWTIMES:   # BigScreen failed: use the theater's own page
+            got = [dict(theater="pickford", title=t, ts=ts, fmt="", url=THEATER_URLS["pickford"], tmdb_id=None)
+                   for t, ts in theirs]
+            results[("pickford", day)] = (got, None)
+            problems.append(f"Mary Pickford Theatre: BigScreen failed for {day} ({str(err)[:200]}); "
+                            "used the D'Place site instead (no D-BOX marks)")
+            note = "Mary Pickford showtimes taken from the theater's site; D-BOX showings are not marked."
+            if note not in NOTES:
+                NOTES.append(note)
+            err = None
+        if err or not got:
+            continue
+        for s in got:
+            s["url"] = dplace_url(s["title"], dp["links"]) or s["url"]
+        if len(theirs) >= MIN_SHOWTIMES:            # both sources answered: they should agree
+            a = Counter(s["ts"].strftime("%H:%M") for s in got)
+            b = Counter(ts.strftime("%H:%M") for _, ts in theirs)
+            diff = sum(((a - b) + (b - a)).values())
+            if diff > max(4, 0.2 * max(sum(a.values()), sum(b.values()))):
+                problems.append(f"Mary Pickford Theatre: BigScreen ({sum(a.values())}) and the D'Place site "
+                                f"({sum(b.values())}) disagree on {diff} showtimes for {day} - check which one is right")
+
+
 # ------------------------------------------------------------------------ TMDB
 TMDB_STATS = {"ok": 0, "fail": 0}
 
@@ -312,7 +462,7 @@ def _tmdb(path, **params):
 def clean_title(t):
     t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM)\s*:\s*", "", t.strip(), flags=re.I)
     t = re.sub(r"\([^)]*\)", " ", t)
-    suffix = (r"\s+-\s+(the imax experience|sensory friendly|open caption\w*|(\d{4}\s+)?re-?issue(\s+\d{4})?"
+    suffix = (r"\s+-\s+(the imax experience|sensory friendly|open caption\w*|(english )?dubbed|(english )?subtitled|(\d{4}\s+)?re-?issue(\s+\d{4})?"
               r"|\d+(st|nd|rd|th)\s+anniversary.*|early access.*|fan event.*)\s*$")
     for _ in range(3):
         t = re.sub(suffix, "", t, flags=re.I)
@@ -434,7 +584,7 @@ def build_movies(showings, use_tmdb):
                                         th_rt=None, th_genre=None, by_theater={}))
         g["th_rt"] = g["th_rt"] or s.get("rt")
         g["th_genre"] = g["th_genre"] or s.get("genre")
-        g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s["imax"])] = s["url"]
+        g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s.get("fmt", ""))] = s["url"]
         if s.get("poster"):
             g["alt_posters"].setdefault(s["theater"], s["poster"])
     # a title that TMDB did not recognise in one theater but did in another: fold it in
@@ -456,7 +606,7 @@ def build_movies(showings, use_tmdb):
             g["genres"] = [g["th_genre"]]
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
-            g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal")
+            g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford")
                                 if k in g["alt_posters"]), None)
     movies.sort(key=sort_key)
     return movies
@@ -496,11 +646,11 @@ def now_card(g, i, d0):
         groups = ""
         for label, want_today in (("", True), ("Tomorrow", False)):
             chips = ""
-            for (ts, imax), url in items:
+            for (ts, fmt), url in items:
                 if (ts.strftime("%Y-%m-%d") == d0) != want_today:
                     continue
-                tag = "<b>IMAX</b> " if imax else ""
-                cls = "t imax" if imax else "t"
+                tag = f"<b>{fmt}</b> " if fmt else ""
+                cls = {"IMAX": "t imax", "D-BOX": "t fmt"}.get(fmt, "t")
                 chips += f'<span class="{cls}" data-ts="{int(ts.timestamp())}">{tag}{fmt_time(ts)}</span>'
             if chips:
                 lab = f'<span class="lab">{label}</span>' if label else ""
@@ -511,8 +661,9 @@ def now_card(g, i, d0):
                  f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></span>{groups}</a>')
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
     gen = f' data-genre="{html.escape(" / ".join(g["genres"]))}"' if g.get("genres") else ""
-    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
-            f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
+    return (f'<article class="card now" tabindex="0"{rt}{gen}><div class="pwrap">{poster_html(g, i)}'
+            f'<div class="ov"><h3>{html.escape(g["title"])}</h3><div class="meta">{rating}</div></div></div>'
+            f'<div class="body"><div class="status" hidden></div>{rows}</div></article>')
 
 
 def soon_card(m, i):
@@ -546,14 +697,16 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .rating{color:var(--acc);font-weight:600} .rating.few{color:var(--mut)} .votes{color:var(--mut);font-size:.75rem;margin-left:6px} .rating.none{color:var(--mut);font-weight:400}
 .th{--tc:#888;--tb:rgba(136,136,136,.10);display:block;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--tb);color:var(--fg);text-decoration:none;transition:filter .12s,transform .12s}
 .th:hover{filter:brightness(1.18)} .th:active{transform:scale(.98)}
-/* three clearly different hues: red / green / blue */
+/* four clearly different hues: red / green / blue / purple */
 [data-th="cinemark"]{--tc:#f0506a;--tb:rgba(240,80,106,.17)}
 [data-th="regal"]{--tc:#2fc48a;--tb:rgba(47,196,138,.16)}
 [data-th="festival"]{--tc:#5b8cff;--tb:rgba(91,140,255,.18)}
+[data-th="pickford"]{--tc:#b98cff;--tb:rgba(170,120,255,.18)}
 @media (prefers-color-scheme:light){
 [data-th="cinemark"]{--tc:#d7193a;--tb:rgba(215,25,58,.08)}
 [data-th="regal"]{--tc:#0f9d64;--tb:rgba(15,157,100,.09)}
-[data-th="festival"]{--tc:#2d63e0;--tb:rgba(45,99,224,.09)}}
+[data-th="festival"]{--tc:#2d63e0;--tb:rgba(45,99,224,.09)}
+[data-th="pickford"]{--tc:#7a3fd6;--tb:rgba(122,63,214,.09)}}
 .th .thn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none;margin:4px 6px 0 0}
 .th .thn{justify-content:flex-start} .th .thn i{margin-left:auto}
 .th .t{background:rgba(255,255,255,.07)}
@@ -579,6 +732,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .card.later img,.card.later .poster{filter:saturate(.55) brightness(.85)}
 .card.done{opacity:.6} .card.done img,.card.done .poster{filter:grayscale(1)}
 .t.imax{border:1px solid var(--acc)} .t.imax b{color:var(--acc);font-size:.68rem;letter-spacing:.03em}
+.t.fmt{border:1px solid var(--tc)} .t.fmt b{color:var(--tc);font-size:.62rem;letter-spacing:.03em}
 .soon .body{padding:8px 10px 10px}
 .badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
 .fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
@@ -601,8 +755,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
 .snext{font-size:.85rem;font-weight:600;margin-top:8px;padding:6px 10px;border-radius:8px;background:var(--chip);display:inline-block}
 .snote{font-size:.75rem;color:var(--mut);margin:12px 2px 0}
-.theaters{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:6px 0 14px}
-@media (max-width:700px){.theaters{grid-template-columns:1fr}}
+.theaters{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 14px}
+@media (max-width:980px){.theaters{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.theaters{grid-template-columns:1fr}}
 .tinfo{background:var(--tb);border-radius:10px;padding:10px 12px;color:var(--fg);font-size:.85rem}
 .tinfo b{display:flex;align-items:center;gap:7px}
 .tinfo b::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none}
@@ -618,10 +773,28 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .c{font-size:.85rem;padding:4px 10px;border-radius:999px;background:var(--chip);white-space:nowrap}
 .c.past{opacity:.4;text-decoration:line-through}
 .c.imax{border:1px solid var(--acc)} .c.imax b{color:var(--acc);font-size:.7rem}
+.c.fmt{border:1px solid var(--tc,#888)} .c.fmt b{color:var(--tc,#888);font-size:.66rem}
 @media (max-width:700px){
   #sheet{align-items:flex-end;padding:0}
   .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0;padding:16px 14px 24px}
   .shead > img,.shead > .poster{width:76px}}
+/* "Now playing" tiles: poster first, title + rating over it, theater blocks below, columns of
+   different heights (masonry, laid out by the script; without it a normal grid is shown) */
+.card.now{background:transparent;border:0;overflow:visible}
+.pwrap{position:relative;border-radius:14px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.35);transition:filter .12s}
+@media (prefers-color-scheme:light){.pwrap{box-shadow:0 4px 14px rgba(0,0,0,.14)}}
+.card.now:hover .pwrap{filter:brightness(1.08)}
+.pwrap .ov{position:absolute;left:0;right:0;bottom:0;padding:44px 10px 9px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.86));color:#fff;pointer-events:none}
+.pwrap .ov h3{color:#fff;margin:0 0 2px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.pwrap .ov .meta{margin:0;font-size:.8rem}
+.pwrap .ov .rating.few,.pwrap .ov .votes,.pwrap .ov .rating.none{color:#cfd3da}
+.card.now .pwrap .poster span{display:none}
+.card.now .body{padding:4px 0 0}
+.card.now .status{margin:4px 2px 2px}
+.card.now:focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:14px}
+.grid.masonry{display:flex;gap:16px;align-items:flex-start}
+.grid.masonry .mcol{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0}
+@media (max-width:700px){.grid.masonry,.grid.masonry .mcol{gap:12px} .pwrap .ov h3{font-size:.9rem} .pwrap .ov{padding:36px 8px 7px}}
 .empty{color:var(--mut)}
 footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
 footer h2{color:var(--fg)}
@@ -670,6 +843,30 @@ JS = """
     r._today=r.querySelector('.times.d0'); r._tmrw=r.querySelector('.times.d1'); }); });
   if(!document.querySelector('.card.now:not([hidden])')) document.getElementById('none').hidden=false;
 
+  /* masonry: keep the order (showing today -> only tomorrow -> done, each by rating), drop each card
+     into the currently shortest column; 2 columns on phones, 3 on tablets, 4 on desktops */
+  var grid=document.getElementById('nowgrid');
+  if(grid){
+    var list=Array.prototype.slice.call(grid.querySelectorAll(':scope > .card.now'));
+    list.forEach(function(c,i){ c._i=i; });
+    list.sort(function(a,b){ return ((+a.style.order||0)-(+b.style.order||0)) || (a._i-b._i); });
+    var ncol=0;
+    var layout=function(){
+      var w=grid.clientWidth, n=w<700?2:(w<980?3:4);
+      if(n===ncol) return; ncol=n;
+      grid.classList.add('masonry'); grid.textContent='';
+      var cols=[];
+      for(var i=0;i<n;i++){ var col=document.createElement('div'); col.className='mcol'; grid.appendChild(col); cols.push(col); }
+      list.forEach(function(c){
+        if(c.hidden) return;
+        var k=0; for(var j=1;j<n;j++) if(cols[j].offsetHeight<cols[k].offsetHeight) k=j;
+        cols[k].appendChild(c);
+      });
+    };
+    layout();
+    var rt; window.addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(layout,120); });
+  }
+
   /* a page kept open (or a home-screen app resumed hours later) reloads itself to get fresh times */
   var loaded=Date.now();
   function maybeReload(){ if(document.visibilityState==='visible' && Date.now()-loaded>10*60*1000) location.reload(); }
@@ -683,7 +880,7 @@ JS = """
     var w=el('div','sgrp'); w.appendChild(el('div','slab',label));
     var box=el('div','schips');
     group.querySelectorAll('.t').forEach(function(t){
-      var c=el('span','c'+(t.classList.contains('past')?' past':'')+(t.classList.contains('imax')?' imax':''));
+      var c=el('span','c'+(t.classList.contains('past')?' past':'')+(t.classList.contains('imax')?' imax':'')+(t.classList.contains('fmt')?' fmt':''));
       c.innerHTML=t.innerHTML; box.appendChild(c);
     });
     w.appendChild(box); return w;
@@ -692,7 +889,7 @@ JS = """
   function dur(m){ m=+m; return Math.floor(m/60)+'h '+(m%60<10?'0':'')+(m%60)+'m'; }
   function open(card){
     sb.innerHTML='';
-    var head=el('div','shead'), pv=card.querySelector(':scope > img, :scope > .poster');
+    var head=el('div','shead'), pv=card.querySelector('.pwrap > img, .pwrap > .poster');
     if(pv) head.appendChild(pv.cloneNode(true));
     var ht=el('div','stitle'); ht.appendChild(el('h3',null,card.querySelector('h3').textContent));
     ht.appendChild(card.querySelector('.meta').cloneNode(true));
@@ -780,7 +977,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <main>
 <h2>Now playing <span class="sub">&middot; still showing today first, then by rating</span></h2>
 <p class="empty" id="none" hidden>Nothing scheduled.</p>
-<section class="grid">
+<section class="grid" id="nowgrid">
 {now_html}
 </section>
 <h2>Coming soon <span class="sub">&middot; next {UPCOMING_DAYS // 7} weeks, most anticipated first</span></h2>
@@ -896,7 +1093,7 @@ def mock_showings(now):
     tm = lambda hh, mm=0: (now + timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
     RT = {"Playing Now And Tomorrow": (118, "Comedy"), "Mixed Theaters": (135, "Sci-Fi"), "Last Day Today": (102, "Horror"),
           "Done Today Back Tomorrow": (96, "Drama"), "Starts Tomorrow": (128, "Action"), "Missed It": (90, "Documentary")}
-    S = lambda th, title, ts, imax=False: dict(theater=th, title=title, ts=ts, imax=imax,
+    S = lambda th, title, ts, imax=False: dict(theater=th, title=title, ts=ts, fmt="IMAX" if imax else "",
                                               url=THEATER_URLS[th] + "#" + ts.strftime("%Y-%m-%d"), tmdb_id=None, poster=None,
                                               rt=RT[title][0], genre=RT[title][1])
     out = []
@@ -911,9 +1108,22 @@ def mock_showings(now):
             S("festival", "Done Today Back Tomorrow", tm(18, 30))]
     out += [S("cinemark", "Starts Tomorrow", tm(19)), S("regal", "Starts Tomorrow", tm(19, 30), True)]
     out += [S("cinemark", "Missed It", t(-6)), S("cinemark", "Missed It", t(-3)), S("regal", "Missed It", t(-2.5))]
+    out += [S("pickford", "Playing Now And Tomorrow", t(h)) for h in (-3, 0.5, 2.5)]
+    out += [S("pickford", "Playing Now And Tomorrow", tm(17)), S("pickford", "Mixed Theaters", t(-1)),
+            S("pickford", "Mixed Theaters", t(4)), S("pickford", "Starts Tomorrow", tm(20))]
+    for x in out[-6:-4] + out[-2:-1]:
+        x["fmt"] = "D-BOX"
     today = now.strftime("%Y-%m-%d")
     tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     return [s for s in out if s["ts"].strftime("%Y-%m-%d") in (today, tomorrow)]
+
+
+def step_summary(line):
+    """A line in the GitHub Actions run summary (information only, does not fail the run)."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"- {line}\n")
 
 
 def write_problems(problems):
@@ -948,7 +1158,8 @@ def main():
             sys.exit("TMDB_API_KEY is not set")
         use_tmdb = True
         fetchers = {"festival": fetch_festival, "cinemark": fetch_cinemark,
-                    "regal": lambda d: fetch_regal(d, official=(d == today))}
+                    "regal": lambda d: fetch_regal(d, official=(d == today)),
+                    "pickford": fetch_pickford, "dplace": fetch_dplace}
 
         def job(kd):
             key, day = kd
@@ -957,8 +1168,10 @@ def main():
             except Exception as e:  # noqa: BLE001
                 return key, day, None, e
 
-        jobs = [(k, d) for k, _ in THEATERS for d in (today, tomorrow)]
-        results = {(k, d): (got, err) for k, d, got, err in pmap(job, jobs, workers=6)}
+        jobs = [(k, d) for k, _ in THEATERS for d in (today, tomorrow)] + [("dplace", None)]
+        results = {(k, d): (got, err) for k, d, got, err in pmap(job, jobs, workers=9)}
+        dp, dp_err = results.pop(("dplace", None))
+        apply_dplace(results, dp, dp_err, (today, tomorrow), problems)
         for key, _ in THEATERS:
             name = THEATER_NAMES[key]
             got, err = results[(key, today)]
@@ -983,7 +1196,7 @@ def main():
                 if got:
                     tmrw_ok.append(key)
         if len(warnings) == len(THEATERS):
-            problems.append("All three theaters failed - the page was NOT updated (the previous version stays online)")
+            problems.append("All theaters failed - the page was NOT updated (the previous version stays online)")
             write_problems(problems)
             sys.exit("All theaters failed; keeping the previously published page.")
 
