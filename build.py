@@ -742,7 +742,7 @@ def soon_card(m, i):
 
 CSS = """
 :root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--cline:#565e70;--acc:#f5b301;--chip:#262b36}
-@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--cline:#8f949c;--acc:#b97d00;--chip:#eef0f4}}
+@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--cline:#c8c8c8;--acc:#b97d00;--chip:#eef0f4}}
 *{box-sizing:border-box}
 body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 header,main,footer{max-width:1100px;margin:0 auto;padding:16px}
