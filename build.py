@@ -36,7 +36,14 @@ PROBLEMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "proble
 HIDE_NON_IMAX_3D = True   # you only watch 3D in IMAX, so other 3D showtimes are dropped
 MAX_UPCOMING = 12        # how many "coming soon" cards
 UPCOMING_DAYS = 28       # only releases within this many days from today
-MIN_SHOWTIMES = 3        # fewer showtimes than this for a theater on a day = probably broken, raise an alert
+MIN_SHOWTIMES = 3
+RERELEASE_DAYS = 548   # first released more than ~18 months ago -> "Re-release" (festival films often open a year late)
+# not films: opera/theatre broadcasts, fights, concerts. Strong words mark an event always; weak ones only
+# when TMDB did not recognise the title (so a film such as "The Phantom of the Opera" stays a film).
+EVENT_STRONG = re.compile(r"\b(met(ropolitan)? opera|national theatre|nt live|bolshoi|royal ballet|ufc|wwe|aew|"
+                          r"fathom events?|in concert|special event|live broadcast)\b", re.I)
+EVENT_WEAK = re.compile(r"\b(opera|ballet|concert|live|encore|tour|fight night|boxing|trivia|q ?& ?a|"
+                        r"marathon|double feature|festival)\b", re.I)        # fewer showtimes than this for a theater on a day = probably broken, raise an alert
 
 # Order = display order on the cards.
 THEATERS = [
@@ -581,7 +588,9 @@ def build_movies(showings, use_tmdb):
                                         pop=(info or {}).get("popularity", 0),
                                         tmdb_id=(info or {}).get("id"),
                                         genres=info_genres(info), runtime=(info or {}).get("runtime") or None,
-                                        th_rt=None, th_genre=None, by_theater={}))
+                                        released=(info or {}).get("release_date") or "", year_hint=None,
+                                        raw_title=s["title"], th_rt=None, th_genre=None, by_theater={}))
+        g["year_hint"] = g["year_hint"] or s.get("year")
         g["th_rt"] = g["th_rt"] or s.get("rt")
         g["th_genre"] = g["th_genre"] or s.get("genre")
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s.get("fmt", ""))] = s["url"]
@@ -604,6 +613,17 @@ def build_movies(showings, use_tmdb):
         g["runtime"] = g["th_rt"] or g["runtime"]
         if not g["genres"] and g["th_genre"]:
             g["genres"] = [g["th_genre"]]
+    old = (datetime.now(TZ) - timedelta(days=RERELEASE_DAYS)).strftime("%Y-%m-%d")
+    for g in movies:  # small poster label: Event / Re-release <year>
+        names = f'{g["raw_title"]} {g["title"]} {g["th_genre"] or ""}'
+        g["label"] = None
+        if EVENT_STRONG.search(names) or (not g["tmdb_id"] and EVENT_WEAK.search(names)) \
+                or re.search(r"\b(event|concert|opera)\b", g["th_genre"] or "", re.I):
+            g["label"] = "Event"
+        elif g["released"][:4].isdigit() and g["released"] < old:
+            g["label"] = f'Re-release <i>{g["released"][:4]}</i>'
+        elif not g["released"] and str(g["year_hint"] or "").isdigit() and f'{g["year_hint"]}-12-31' < old:
+            g["label"] = f'Re-release <i>{g["year_hint"]}</i>'
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
             g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford")
@@ -661,7 +681,8 @@ def now_card(g, i, d0):
                  f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></span>{groups}</a>')
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
     gen = f' data-genre="{html.escape(" / ".join(g["genres"]))}"' if g.get("genres") else ""
-    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
+    lab = f'<span class="plab">{g["label"]}</span>' if g.get("label") else ""
+    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}{lab}<div class="body"><h3>{html.escape(g["title"])}</h3>'
             f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
 
@@ -672,22 +693,30 @@ def soon_card(m, i):
     except (KeyError, ValueError):
         d = "TBA"
     g = dict(title=title, poster=(IMG + m["poster_path"]) if m.get("poster_path") else None)
-    return (f'<article class="card soon">{poster_html(g, i + 30)}<span class="badge">{d}</span>'
-            f'<div class="body"><h3>{html.escape(title)}</h3></div></article>')
+    return (f'<article class="card soon" title="{html.escape(title)}">{poster_html(g, i + 30)}<span class="badge">{d}</span>'
+            f'<h3 class="vh">{html.escape(title)}</h3></article>')
 
 
 CSS = """
-:root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--cline:#414858;--acc:#f5b301;--chip:#262b36}
-@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--cline:#a7abb3;--acc:#b97d00;--chip:#eef0f4}}
+:root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--cline:#565e70;--acc:#f5b301;--chip:#262b36}
+@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--cline:#8f949c;--acc:#b97d00;--chip:#eef0f4}}
 *{box-sizing:border-box}
 body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 header,main,footer{max-width:1100px;margin:0 auto;padding:16px}
 h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .sub{font-weight:400;font-size:.8rem}
 .sub{color:var(--mut);font-size:.9rem}
+/* page title as a quiet background element: centered, small, spaced, faded; date/update line muted below it */
+header{text-align:center;padding-bottom:0}
+header h1{font-size:1.05rem;font-weight:600;letter-spacing:.32em;text-transform:uppercase;opacity:.38;margin:4px 0 0;padding-left:.32em}
+header .sub{font-size:.78rem;opacity:.8;margin-top:2px}
+main > h2:first-child{margin-top:12px}
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
 @media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
-.card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--cline)}
+/* double edge: a clear 1px line plus a half-strength, half-width ring around it (soft shadow in the light theme) */
+.card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--cline);
+  box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent)}
+@media (prefers-color-scheme:light){.card{box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent),0 1px 2px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.07)}}
 .card img,.poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .poster{background:linear-gradient(160deg,#3a4a66,#1c2233);display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
 .body{padding:10px}
@@ -735,6 +764,10 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .t.fmt{border:1px solid var(--tc)} .t.fmt b{color:var(--tc);font-size:.62rem;letter-spacing:.03em}
 .times.d1 .t.imax{border:1px solid var(--acc)} .times.d1 .t.fmt{border:1px solid var(--tc)}
 .soon .body{padding:8px 10px 10px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.plab{position:absolute;top:8px;left:8px;z-index:1;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
+  border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+.plab i{font-style:normal;font-weight:500;opacity:.8}
 .badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
 .fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
 @media (max-width:1100px){.fallback{margin:8px 16px}}
@@ -747,8 +780,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}
 .sheet-box{position:relative;width:100%;max-width:520px;max-height:86vh;overflow:auto;background:var(--card);
   border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
-.sheet-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;
-  background:var(--chip);color:var(--fg);font-size:1.4rem;line-height:1;cursor:pointer}
+.sheet-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
+  display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer}
+.sheet-x svg{width:14px;height:14px;display:block}
 .shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
 .shead > img,.shead > .poster{width:92px;flex:none;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
 .stitle h3{font-size:1.15rem;margin:2px 0 4px}
@@ -989,7 +1023,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <p>This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</p>
 </div></footer>
 <div id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-box" role="dialog" aria-modal="true">
-<button class="sheet-x" aria-label="Close">&times;</button><div class="sheet-body"></div></div></div>
+<button class="sheet-x" aria-label="Close"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button><div class="sheet-body"></div></div></div>
 <script>{JS}</script>
 </body></html>"""
 
@@ -1087,7 +1121,8 @@ def mock_showings(now):
     t = lambda h: (now + timedelta(hours=h)).replace(second=0, microsecond=0)
     tm = lambda hh, mm=0: (now + timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
     RT = {"Playing Now And Tomorrow": (118, "Comedy"), "Mixed Theaters": (135, "Sci-Fi"), "Last Day Today": (102, "Horror"),
-          "Done Today Back Tomorrow": (96, "Drama"), "Starts Tomorrow": (128, "Action"), "Missed It": (90, "Documentary")}
+          "Done Today Back Tomorrow": (96, "Drama"), "Starts Tomorrow": (128, "Action"), "Missed It": (90, "Documentary"),
+          "The Metropolitan Opera: Carmen": (215, "Opera")}
     S = lambda th, title, ts, imax=False: dict(theater=th, title=title, ts=ts, fmt="IMAX" if imax else "",
                                               url=THEATER_URLS[th] + "#" + ts.strftime("%Y-%m-%d"), tmdb_id=None, poster=None,
                                               rt=RT[title][0], genre=RT[title][1])
@@ -1108,6 +1143,10 @@ def mock_showings(now):
             S("pickford", "Mixed Theaters", t(4)), S("pickford", "Starts Tomorrow", tm(20))]
     for x in out[-6:-4] + out[-2:-1]:
         x["fmt"] = "D-BOX"
+    out += [S("pickford", "The Metropolitan Opera: Carmen", t(h)) for h in (-1, 3)]
+    for x in out:
+        if x["title"] == "Done Today Back Tomorrow":
+            x["year"] = "1984"
     today = now.strftime("%Y-%m-%d")
     tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
     return [s for s in out if s["ts"].strftime("%Y-%m-%d") in (today, tomorrow)]
