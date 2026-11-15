@@ -520,6 +520,24 @@ def norm(t):
     return re.sub(r"[^a-z0-9]+", "", clean_title(t).lower())
 
 
+# These theaters' pages cannot open one movie for our theater (their movie pages ask where you are), so the
+# colored block opens the theater's page and a "text fragment" scrolls it to the movie's title and highlights it.
+# Browsers that do not know text fragments, or a title that is not found, simply show the top of the page.
+FRAGMENT_THEATERS = ("cinemark", "regal", "pickford")
+
+
+def text_fragment(title, theater, others):
+    """'#:~:text=Title' for the theater's page, or '' when it could scroll to the wrong film: the title is part of
+    another title shown at the same theater ("Dune" / "Dune: Part Two" -> the first match would be Part Two)."""
+    if theater not in FRAGMENT_THEATERS:
+        return ""
+    shown = re.sub(r"\s+", " ", re.sub(r"\([^)]*\)", " ", title)).strip()
+    n = norm(shown)
+    if not n or any(o != n and n in o for o in others):
+        return ""
+    return "#:~:text=" + urllib.parse.quote(shown, safe="").replace("-", "%2D")
+
+
 def titles_match(a, b):
     a, b = norm(a), norm(b)
     if not a or not b:
@@ -689,7 +707,7 @@ def poster_html(g, i):
             f'hsl({h + 60} 45% 16%))"><span>{html.escape(g["title"])}</span></div>')
 
 
-def now_card(g, i, d0):
+def now_card(g, i, d0, others=None):
     if g["votes"] >= 10 and g["rating"] > 0:
         few = " few" if g["votes"] < FEW_VOTES else ""
         rating = (f'<span class="rating{few}">&#9733; {g["rating"]:.1f}</span>'
@@ -704,6 +722,10 @@ def now_card(g, i, d0):
         items = sorted(shows.items())
         url0 = next((u for (ts, _), u in items if ts.strftime("%Y-%m-%d") == d0), None)
         url1 = next((u for (ts, _), u in items if ts.strftime("%Y-%m-%d") != d0), None)
+        frag = text_fragment(g["title"], key, (others or {}).get(key, ()))
+        if frag:
+            url0 = url0.split("#")[0] + frag if url0 else url0
+            url1 = url1.split("#")[0] + frag if url1 else url1
         groups = ""
         for label, want_today in (("", True), ("Tomorrow", False)):
             chips = ""
@@ -1018,7 +1040,8 @@ JS = """
 
 
 def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
-    now_html = "\n".join(now_card(g, i, today) for i, g in enumerate(movies))
+    others = {k: [norm(g["title"]) for g in movies if k in g["by_theater"]] for k, _ in THEATERS}
+    now_html = "\n".join(now_card(g, i, today, others) for i, g in enumerate(movies))
     soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
     nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
     nice_tmrw = "Today, " + datetime.strptime(tomorrow, "%Y-%m-%d").strftime("%A, %b %-d")
