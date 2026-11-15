@@ -76,13 +76,18 @@ NOTES = []  # extra footer lines (e.g. which backup source was used)
 CINEMARK_ID = 479
 CINEMARK_BASE = "https://www.cinemark.com"
 REGAL_BASE = "https://www.regmovies.com"
-REGAL_THEATRE = f"{REGAL_BASE}/theatres/regal-rancho-mirage-1801"
+REGAL_SITE = "1801"
+REGAL_THEATRE = f"{REGAL_BASE}/theatres/regal-rancho-mirage-{REGAL_SITE}"
 BIGSCREEN_REGAL = "https://www.bigscreen.com/Marquee.php?theater=6355&view=sched&showdate={date}"
 # Mary Pickford: BigScreen is the main source (it marks D-BOX showings and already works from GitHub);
 # the theater's own D'Place page gives direct movie links, a cross-check and a backup.
 BIGSCREEN_PICKFORD = "https://www.bigscreen.com/Marquee.php?theater=7873&view=sched&showdate={date}"
 DPLACE_BASE = "https://www.dplaceentertainment.com"
 DPLACE_THEATRE_ID = "0000000673"
+# D'Place answered GitHub's server with "405 Not Allowed" while the default Accept header was sent;
+# these are the ordinary headers of a page request (same honest User-Agent).
+DPLACE_HEADERS = {"Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8", "Accept-Language": "en-US,en;q=0.9",
+                  "Upgrade-Insecure-Requests": "1"}
 FESTIVAL_BASE = "https://festivaltheaters.com"
 FESTIVAL_SITE_ID = "177"
 FESTIVAL_CIRCUIT_ID = "106"
@@ -105,7 +110,11 @@ def http(url, data=None, headers=None, tries=3):
                     raw = gzip.decompress(raw)
                 return raw.decode("utf-8", "replace")
         except urllib.error.HTTPError as e:
-            last = e
+            last = f"HTTP Error {e.code}: {e.reason}"
+            try:
+                e.close()      # Python 3.14 prints "I/O operation on closed file" at exit otherwise
+            except Exception:  # noqa: BLE001
+                pass
             if e.code < 500 and e.code not in (408, 429):
                 break
         except Exception as e:  # noqa: BLE001
@@ -146,8 +155,10 @@ def fmt_of(attrs, imax):
 def parse_cinemark(data, today):
     out = []
     for m in data:
-        slug = m.get("movieSlug") or ""
-        url = f"{CINEMARK_BASE}/movies/{slug}?showDate={today}"
+        # The movie page of cinemark.com lists several theaters and asks where you are, so the colored block
+        # opens this theater's own page instead; each time opens that showing's seat map at this theater.
+        url = THEATER_URLS["cinemark"]
+        movie_id = m.get("cinemarkMovieId") or m.get("movieId")
         rt = m.get("movieRuntimeMinutes") or None
         genre = m.get("movieGenre") or None
         poster = m.get("moviePosterUrl") or None
@@ -161,8 +172,15 @@ def parse_cinemark(data, today):
             for s in pt.get("showtimes", []):
                 ts = la(parse_utc(s["startTime"]))
                 if ts.strftime("%Y-%m-%d") == today:
+                    buy = None
+                    if movie_id and s.get("id"):
+                        buy = f"{CINEMARK_BASE}/TicketSeatMap/?" + urllib.parse.urlencode(
+                            {"cinemarkMovieId": movie_id, "linkedShowtimeId": s.get("linkedShowtimeId") or 0,
+                             "showtime": ts.strftime("%Y-%m-%dT%H:%M:%S"), "showtimeId": s["id"],
+                             "theaterId": CINEMARK_ID})
                     out.append(dict(theater="cinemark", title=m.get("movieTitle", ""), ts=ts,
-                                    fmt=fmt_of(name, imax), url=url, tmdb_id=None, poster=poster, rt=rt, genre=genre))
+                                    fmt=fmt_of(name, imax), url=url, buy=buy, tmdb_id=None, poster=poster, rt=rt,
+                                    genre=genre))
     return out
 
 
@@ -193,8 +211,12 @@ def parse_regal(page_html, today):
                     continue
                 naive = datetime.fromisoformat(p["CalendarShowTime"])
                 ts = naive.replace(tzinfo=TZ)
+                buy = None
+                if p.get("PerformanceId") and not p.get("StopSales"):
+                    buy = (f"{REGAL_BASE}{path}?site={REGAL_SITE}&id={p['PerformanceId']}"
+                           f"&date={ts.strftime('%m-%d-%Y')}")
                 out.append(dict(theater="regal", title=title, ts=ts, fmt=fmt_of(" ".join(attrs), imax),
-                                url=REGAL_BASE + path, tmdb_id=None))
+                                url=THEATER_URLS["regal"], buy=buy, tmdb_id=None))
     return out
 
 
@@ -290,7 +312,7 @@ def fetch_regal(day, official=True):
     if not got:
         raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {day}")
     if official:
-        NOTES.append("Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page.")
+        NOTES.append("Regal showtimes via BigScreen Cinema Guide (bigscreen.com); Regal's own site could not be read, so its times open the theater's page.")
     return got
 
 
@@ -330,10 +352,23 @@ def _walk(o):
 
 def parse_dplace(page_html):
     """Mary Pickford's own showtimes page (six days on one page). Returns
-    {"links": {norm title: movie page url}, "days": {date: [(title, ts)]}, "how": how the times were read}.
+    {"links": {norm title: movie page url}, "days": {date: [(title, ts)]}, "how": how the times were read,
+     "tickets": [(title, ts, ticket url)]}.
     The times are read two ways (schema.org events, else the visible day sections); "days" stays
     empty when neither matches, so a redesign of the site can never put wrong times on the page."""
     links, days, how = {}, {}, ""
+    tickets = []
+    # ticket links: <a href=".../Tickets/<theater>/<id>/<id>" aria-label="Buy tickets for TITLE at 11:00 AM">
+    #               <time datetime="2026-11-15T11:00:00-08:00">11:00 AM</time></a>
+    for href, label, dt in re.findall(
+            r'<a\b[^>]*href="([^"]*/Tickets/[^"]+)"[^>]*aria-label="Buy tickets for ([^"]+?) at [^"]*"[^>]*>\s*'
+            r'<time[^>]*datetime="([^"]+)"', page_html, re.S):
+        try:
+            tts = datetime.fromisoformat(dt)
+            tts = tts.replace(tzinfo=TZ) if tts.tzinfo is None else tts.astimezone(TZ)
+        except ValueError:
+            continue
+        tickets.append((html.unescape(label), tts, urllib.parse.urljoin(DPLACE_BASE, html.unescape(href))))
 
     def add_link(title, url):
         if title and url and f"/{DPLACE_THEATRE_ID}/movies/" in url:
@@ -389,29 +424,32 @@ def parse_dplace(page_html):
                     days.setdefault(day, []).append((title, ts))
         if days:
             how = "day sections"
-    return {"links": links, "days": days, "how": how}
+    return {"links": links, "days": days, "how": how, "tickets": tickets}
 
 
 def fetch_dplace(_=None):
-    return parse_dplace(http(THEATER_URLS["pickford"], tries=2))
+    return parse_dplace(http(THEATER_URLS["pickford"], tries=2, headers=DPLACE_HEADERS))
 
 
-def dplace_url(title, links):
-    for k, u in links.items():
-        if titles_match(k, title):
-            return u
+def dplace_ticket(title, ts, tickets):
+    """The ticket link of the D'Place showing with this title at this exact time, if there is one."""
+    for t, tts, url in tickets:
+        if tts == ts and titles_match(t, title):
+            return url
     return None
 
 
 def apply_dplace(results, dp, dp_err, days, problems):
-    """Mary Pickford: direct movie links from D'Place, a BigScreen-vs-D'Place check, and D'Place as the
-    backup source when BigScreen fails. D'Place being unreachable never fails the run (links then
-    go to the theater's showtimes page); a real disagreement between the two sources does."""
+    """Mary Pickford: a ticket link for every showtime D'Place lists, a BigScreen-vs-D'Place check, and D'Place
+    as the backup source when BigScreen fails. D'Place being unreachable never fails the run (the times then
+    simply have no ticket link); a real disagreement between the two sources does. The colored block always
+    opens the theater's showtimes page, because D'Place's movie pages ask which theater you mean."""
     if dp_err or not dp:
         print(f"  D'Place: not available ({dp_err}); Mary Pickford links go to the showtimes page")
-        step_summary(f"D'Place site not available from GitHub ({str(dp_err)[:200]}) - Mary Pickford uses BigScreen only.")
+        step_summary(f"D'Place site not available from GitHub ({str(dp_err)[:200]}) - Mary Pickford uses BigScreen only, "
+                     "its times have no ticket links.")
         return
-    print(f"  D'Place: {len(dp['links'])} movie links, times read via {dp['how'] or 'nothing (layout not recognised)'}: "
+    print(f"  D'Place: {len(dp['tickets'])} ticket links, times read via {dp['how'] or 'nothing (layout not recognised)'}: "
           + ", ".join(f"{d} {len(v)}" for d, v in sorted(dp["days"].items())))
     if not dp["how"]:
         step_summary("D'Place: showtimes layout not recognised - no cross-check / backup for Mary Pickford.")
@@ -419,8 +457,8 @@ def apply_dplace(results, dp, dp_err, days, problems):
         got, err = results[("pickford", day)]
         theirs = dp["days"].get(day, [])
         if err and len(theirs) >= MIN_SHOWTIMES:   # BigScreen failed: use the theater's own page
-            got = [dict(theater="pickford", title=t, ts=ts, fmt="", url=THEATER_URLS["pickford"], tmdb_id=None)
-                   for t, ts in theirs]
+            got = [dict(theater="pickford", title=t, ts=ts, fmt="", url=THEATER_URLS["pickford"], tmdb_id=None,
+                        buy=dplace_ticket(t, ts, dp["tickets"])) for t, ts in theirs]
             results[("pickford", day)] = (got, None)
             problems.append(f"Mary Pickford Theatre: BigScreen failed for {day} ({str(err)[:200]}); "
                             "used the D'Place site instead (no D-BOX marks)")
@@ -431,7 +469,7 @@ def apply_dplace(results, dp, dp_err, days, problems):
         if err or not got:
             continue
         for s in got:
-            s["url"] = dplace_url(s["title"], dp["links"]) or s["url"]
+            s["buy"] = dplace_ticket(s["title"], s["ts"], dp["tickets"])
         if len(theirs) >= MIN_SHOWTIMES:            # both sources answered: they should agree
             a = Counter(s["ts"].strftime("%H:%M") for s in got)
             b = Counter(ts.strftime("%H:%M") for _, ts in theirs)
@@ -586,7 +624,7 @@ def build_movies(showings, use_tmdb):
                                         votes=(info or {}).get("vote_count", 0),
                                         rating=(info or {}).get("vote_average", 0),
                                         pop=(info or {}).get("popularity", 0),
-                                        tmdb_id=(info or {}).get("id"),
+                                        tmdb_id=(info or {}).get("id"), buy={},
                                         genres=info_genres(info), runtime=(info or {}).get("runtime") or None,
                                         released=(info or {}).get("release_date") or "", year_hint=None,
                                         raw_title=s["title"], th_rt=None, th_genre=None, by_theater={}))
@@ -594,6 +632,8 @@ def build_movies(showings, use_tmdb):
         g["th_rt"] = g["th_rt"] or s.get("rt")
         g["th_genre"] = g["th_genre"] or s.get("genre")
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s.get("fmt", ""))] = s["url"]
+        if s.get("buy"):
+            g["buy"][(s["theater"], s["ts"], s.get("fmt", ""))] = s["buy"]
         if s.get("poster"):
             g["alt_posters"].setdefault(s["theater"], s["poster"])
     # a title that TMDB did not recognise in one theater but did in another: fold it in
@@ -606,6 +646,7 @@ def build_movies(showings, use_tmdb):
                 target["by_theater"].setdefault(th, {}).update(shows)
             for th, pst in src["alt_posters"].items():
                 target["alt_posters"].setdefault(th, pst)
+            target["buy"].update(src["buy"])
             target["th_rt"] = target["th_rt"] or src["th_rt"]
             target["th_genre"] = target["th_genre"] or src["th_genre"]
     movies = list(groups.values())
@@ -671,7 +712,9 @@ def now_card(g, i, d0):
                     continue
                 tag = f"<b>{fmt}</b> " if fmt else ""
                 cls = {"IMAX": "t imax", "D-BOX": "t fmt"}.get(fmt, "t")
-                chips += f'<span class="{cls}" data-ts="{int(ts.timestamp())}">{tag}{fmt_time(ts)}</span>'
+                buy = g["buy"].get((key, ts, fmt))
+                bx = f' data-buy="{html.escape(buy)}" title="Open this showing on the theater&rsquo;s site"' if buy else ""
+                chips += f'<span class="{cls}" data-ts="{int(ts.timestamp())}"{bx}>{tag}{fmt_time(ts)}</span>'
             if chips:
                 lab = f'<span class="lab">{label}</span>' if label else ""
                 groups += f'<div class="times {"d0" if want_today else "d1"}">{lab}{chips}</div>'
@@ -713,10 +756,9 @@ main > h2:first-child{margin-top:12px}
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
 @media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
-/* double edge: a clear 1px line plus a half-strength, half-width ring around it (soft shadow in the light theme) */
+/* double edge: a clear 1px line plus a half-strength, half-width ring around it (no drop shadow) */
 .card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--cline);
   box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent)}
-@media (prefers-color-scheme:light){.card{box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent),0 1px 2px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.07)}}
 .card img,.poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .poster{background:linear-gradient(160deg,#3a4a66,#1c2233);display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
 .body{padding:10px}
@@ -752,6 +794,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t.past{opacity:.45;text-decoration:line-through}
+.t[data-buy]:not(.past),.c[data-buy]:not(.past){cursor:pointer;transition:filter .12s}
+.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(.93);text-decoration:underline;text-underline-offset:2px}
+@media (prefers-color-scheme:dark){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(1.35)}}
 /* tomorrow: dashed outline in the theater's colour at half strength (plain colour where color-mix is unsupported) */
 .times.d1 .t{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent)}
 .lab{flex-basis:100%;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
@@ -910,7 +955,8 @@ JS = """
     var box=el('div','schips');
     group.querySelectorAll('.t').forEach(function(t){
       var c=el('span','c'+(t.classList.contains('past')?' past':'')+(t.classList.contains('imax')?' imax':'')+(t.classList.contains('fmt')?' fmt':''));
-      c.innerHTML=t.innerHTML; box.appendChild(c);
+      c.innerHTML=t.innerHTML; if(t.dataset.buy && !t.classList.contains('past')) c.dataset.buy=t.dataset.buy;
+      box.appendChild(c);
     });
     w.appendChild(box); return w;
   }
@@ -957,6 +1003,8 @@ JS = """
   function close(){ sheet.hidden=true; document.documentElement.style.overflow=''; }
   document.addEventListener('click',function(e){
     if(e.target.closest('.sheet-bg, .sheet-x')){ close(); return; }
+    var bt=e.target.closest('.t[data-buy], .c[data-buy]');   /* a showtime with its own ticket link */
+    if(bt && !bt.classList.contains('past')){ e.preventDefault(); window.open(bt.dataset.buy,'_blank','noopener'); return; }
     if(e.target.closest('a')) return;            /* theater block: follow the link */
     var c=e.target.closest('.card.now');
     if(c) open(c);
@@ -1019,7 +1067,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <div class="theaters">{theaters}</div>
 <div class="foot">
 <p>* Showtimes are collected automatically from the theaters&rsquo; websites and can change or be incomplete. Please confirm on the theater&rsquo;s site before you go. Last updated {updated}.</p>
-<p>Tap a movie for its full schedule; tap a colored theater block to open that movie on the theater&rsquo;s site.{notes}</p>
+<p>Tap a movie for its full schedule. Tap a showtime to open that showing on the theater&rsquo;s site (where the theater allows it), or the colored theater block to open the theater&rsquo;s page.{notes}</p>
 <p>This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</p>
 </div></footer>
 <div id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-box" role="dialog" aria-modal="true">
