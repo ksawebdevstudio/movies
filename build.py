@@ -155,6 +155,8 @@ def parse_bigscreen(page_html, today, theater="regal", url=None):
         if not m or len(cell) < 2:
             continue
         title = html.unescape(m.group(1)).strip()
+        ym = re.search(r'<span class="small">((?:19|20)\d\d) - </span>', row)
+        year = ym.group(1) if ym else None
         pm = re.search(r"MovieGraphics/thumbs/(\d+)\.jpg", row)
         poster = f"https://www.bigscreenimages.com/Graphics/MovieGraphics/{pm.group(1)}.jpg" if pm else None
         # the cell is a sequence of groups: times..., then <span class="showcomment">attributes</span>
@@ -173,7 +175,8 @@ def parse_bigscreen(page_html, today, theater="regal", url=None):
                 if suf == "a" and hour < 4:
                     continue  # after-midnight show, belongs to the next calendar day
                 ts = datetime.strptime(f"{today} {hour}:{mm}", "%Y-%m-%d %H:%M").replace(tzinfo=TZ)
-                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None, poster=poster))
+                out.append(dict(theater=theater, title=title, ts=ts, imax=imax, url=url, tmdb_id=None,
+                                poster=poster, year=year))
     return out
 
 
@@ -204,19 +207,26 @@ def fetch_cinemark(today):
 
 
 def fetch_regal(today):
-    """Regal's own site first; if it refuses this server, use BigScreen's listing for the same theater."""
+    """Regal's own site first; if it refuses this server (or has nothing for that day),
+    use BigScreen's listing for the same theater."""
     try:
-        return parse_regal(http(REGAL_THEATRE, tries=2), today)
-    except Exception as e1:  # noqa: BLE001
-        print(f"  Regal official site failed ({e1}); trying BigScreen")
-        try:
-            got = parse_bigscreen(http(BIGSCREEN_REGAL.format(date=today), tries=2), today)
-        except Exception as e2:  # noqa: BLE001
-            raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: {e2}") from None
-        if not got:
-            raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {today}")
-        NOTES.append("Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page.")
-        return got
+        got = parse_regal(http(REGAL_THEATRE, tries=2), today)
+        if got:
+            return got
+        e1 = "no showtimes for that day on the theatre page"
+    except Exception as e:  # noqa: BLE001
+        e1 = e
+    print(f"  Regal official site: {e1}; trying BigScreen")
+    try:
+        got = parse_bigscreen(http(BIGSCREEN_REGAL.format(date=today), tries=2), today)
+    except Exception as e2:  # noqa: BLE001
+        raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: {e2}") from None
+    if not got:
+        raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {today}")
+    note = "Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page."
+    if note not in NOTES:
+        NOTES.append(note)
+    return got
 
 
 def fetch_festival(today):
@@ -284,8 +294,8 @@ def tmdb_by_id(i):
     return _cache[k]
 
 
-def tmdb_by_title(title):
-    k = ("t", norm(title))
+def tmdb_by_title(title, year=None):
+    k = ("t", norm(title), year)
     if k not in _cache:
         found = None
         try:
@@ -299,6 +309,8 @@ def tmdb_by_title(title):
                 loose = [r for r in res if titles_match(q, r.get("title", "")) or
                          titles_match(q, r.get("original_title", ""))]
                 pick = exact or loose
+                if pick and year:  # a known release year narrows it down (re-releases)
+                    pick = [r for r in pick if (r.get("release_date") or "").startswith(year)] or pick
                 if pick:
                     found = max(pick, key=lambda r: r.get("popularity", 0))
                     break
@@ -309,15 +321,21 @@ def tmdb_by_title(title):
 
 
 # ----------------------------------------------------------------- aggregation
+FEW_VOTES = 100   # below this a rating is shown dimmed and counts less in the sort
+
+
 def sort_key(g):
-    """Best rated first. Ratings with few votes are pulled toward an average so that
-    '9.5 from 12 votes' does not outrank '8.2 from 3000 votes'. Unrated titles go last,
-    most popular first."""
+    """Best rated first, but a rating built on few votes is pulled toward an average,
+    so '8.8 from 14 votes' does not outrank '8.5 from 900 votes'. The card shows the
+    vote count so the order is explainable. Unrated titles go last, most popular first."""
     v, r = g["votes"], g["rating"]
     if v >= 10 and r > 0:
         return (0, -((v * r + 50 * 6.5) / (v + 50)), g["title"])
     return (1 if g["tmdb_id"] else 2, -g["pop"], g["title"])
 
+
+def fmt_votes(v):
+    return f"{v / 1000:.1f}k".replace(".0k", "k") if v >= 1000 else str(v)
 
 
 def build_movies(showings, use_tmdb):
@@ -325,7 +343,7 @@ def build_movies(showings, use_tmdb):
     for s in showings:
         info = None
         if use_tmdb:
-            info = tmdb_by_id(s["tmdb_id"]) if s["tmdb_id"] else tmdb_by_title(s["title"])
+            info = tmdb_by_id(s["tmdb_id"]) if s["tmdb_id"] else tmdb_by_title(s["title"], s.get("year"))
             if info is None and s["tmdb_id"]:
                 info = tmdb_by_title(s["title"])
         key = ("tmdb", info["id"]) if info else ("t", norm(s["title"]))
@@ -364,9 +382,11 @@ def poster_html(g, i):
             f'hsl({h + 60} 45% 16%))"><span>{html.escape(g["title"])}</span></div>')
 
 
-def now_card(g, i):
+def now_card(g, i, d0):
     if g["votes"] >= 10 and g["rating"] > 0:
-        rating = f'<span class="rating">&#9733; {g["rating"]:.1f}</span>'
+        few = " few" if g["votes"] < FEW_VOTES else ""
+        rating = (f'<span class="rating{few}">&#9733; {g["rating"]:.1f}</span>'
+                  f'<span class="votes">{fmt_votes(g["votes"])} votes</span>')
     else:
         rating = '<span class="rating none">No ratings yet</span>'
     rows = ""
@@ -375,17 +395,23 @@ def now_card(g, i):
         if not shows:
             continue
         items = sorted(shows.items())
-        first_url = items[0][1]
-        chips = ""
-        for (ts, imax), url in items:
-            tag = "<b>IMAX</b> " if imax else ""
-            cls = "t imax" if imax else "t"
-            chips += (f'<a class="{cls}" data-ts="{int(ts.timestamp())}" href="{html.escape(url)}" '
-                      f'target="_blank" rel="noopener">{tag}{fmt_time(ts)}</a>')
-        rows += (f'<div class="th"><a class="thn" href="{html.escape(first_url)}" target="_blank" rel="noopener">'
-                 f'{html.escape(name)}<i>&#8599;</i></a><div class="times">{chips}</div></div>')
+        groups = ""
+        for label, want_today in (("", True), ("Tomorrow", False)):
+            chips = ""
+            for (ts, imax), url in items:
+                if (ts.strftime("%Y-%m-%d") == d0) != want_today:
+                    continue
+                tag = "<b>IMAX</b> " if imax else ""
+                cls = "t imax" if imax else "t"
+                chips += (f'<a class="{cls}" data-ts="{int(ts.timestamp())}" href="{html.escape(url)}" '
+                          f'target="_blank" rel="noopener">{tag}{fmt_time(ts)}</a>')
+            if chips:
+                lab = f'<span class="lab">{label}</span>' if label else ""
+                groups += f'<div class="times {"d0" if want_today else "d1"}">{lab}{chips}</div>'
+        rows += (f'<div class="th" data-th="{key}"><a class="thn" href="{html.escape(items[0][1])}" target="_blank" '
+                 f'rel="noopener">{html.escape(name)}<i>&#8599;</i></a>{groups}</div>')
     return (f'<article class="card now">{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
-            f'<div class="meta">{rating}</div>{rows}</div></article>')
+            f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
 
 def soon_card(m, i):
@@ -416,13 +442,21 @@ h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .
 .body{padding:10px}
 h3{margin:0;font-size:.95rem;line-height:1.25}
 .meta{margin:4px 0 8px;font-size:.85rem}
-.rating{color:var(--acc);font-weight:600} .rating.none{color:var(--mut);font-weight:400}
+.rating{color:var(--acc);font-weight:600} .rating.few{color:var(--mut)} .votes{color:var(--mut);font-size:.75rem;margin-left:6px} .rating.none{color:var(--mut);font-weight:400}
 .th{padding:8px 0;border-top:1px solid var(--line)}
 .thn{display:flex;justify-content:space-between;gap:6px;font-size:.78rem;font-weight:600;color:var(--fg);text-decoration:none;line-height:1.2}
 .thn i{font-style:normal;color:var(--mut)} .thn:hover{color:var(--acc)}
 .times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t:hover{background:var(--acc);color:#111}
+.t.past{opacity:.45;text-decoration:line-through;pointer-events:none}
+.times.d1 .t{background:transparent;border:1px dashed var(--line)}
+.lab{flex-basis:100%;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.status{font-size:.78rem;color:var(--mut);margin:-2px 0 8px;font-weight:600}
+.card.now:not(.later):not(.done) .status{color:var(--acc)}
+.th.off .thn{color:var(--mut)}
+.card.later img,.card.later .poster{filter:saturate(.55) brightness(.85)}
+.card.done{opacity:.6} .card.done img,.card.done .poster{filter:grayscale(1)}
 .t.imax{border:1px solid var(--acc)} .t.imax b{color:var(--acc);font-size:.68rem;letter-spacing:.03em}
 .t.imax:hover b{color:#111}
 .soon .body{padding:8px 10px 10px}
@@ -438,25 +472,49 @@ footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
 
 JS = """
 (function(){
-  if(document.body.dataset.preview) return;
-  var fmt=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'});
-  var stale=fmt.format(new Date())!==document.body.dataset.date;
-  if(stale){document.getElementById('stale').hidden=false;}
-  else{
-    var now=Date.now()/1000;
-    document.querySelectorAll('.t').forEach(function(a){ if(+a.dataset.ts<now) a.hidden=true; });
-    document.querySelectorAll('.th').forEach(function(r){ if(!r.querySelector('.t:not([hidden])')) r.hidden=true; });
-    document.querySelectorAll('.card.now').forEach(function(c){ if(!c.querySelector('.th:not([hidden])')) c.hidden=true; });
-  }
+  var B=document.body, d0=B.dataset.d0, d1=B.dataset.d1, ok=(B.dataset.tmrwOk||'').split(',');
+  var day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date());
+  var now=Date.now()/1000, cards=document.querySelectorAll('.card.now');
+  var hide=function(el){ if(el) el.hidden=true; };
+  if(day!==d0 && day!==d1){ document.getElementById('stale').hidden=false; return; }
+  var rolled=(day===d1);            /* past midnight: yesterday's "tomorrow" is today now */
+  if(rolled){ var s=document.getElementById('daylabel'); if(s) s.textContent=B.dataset.d1nice; }
+  var allOk=!rolled && ok.length>=+B.dataset.nth;
+  cards.forEach(function(c){
+    var upcoming=0, hadToday=0, tomorrow=0;
+    c.querySelectorAll('.th').forEach(function(r){
+      var a=r.querySelector('.times.d0'), b=r.querySelector('.times.d1'), up=0;
+      if(rolled){ hide(a); a=b; b=null; if(a){ a.classList.remove('d1'); hide(a.querySelector('.lab')); } }
+      if(a){ a.querySelectorAll('.t').forEach(function(t){ hadToday++; if(+t.dataset.ts<now) t.classList.add('past'); else up++; }); }
+      if(b){ tomorrow+=b.querySelectorAll('.t').length; if(up) b.hidden=true; }
+      upcoming+=up;
+      if(!a && !b) r.hidden=true;
+      else if(!up) r.classList.add('off');
+    });
+    var st=c.querySelector('.status'), msg='';
+    if(rolled && !hadToday){ c.hidden=true; return; }
+    if(upcoming){
+      c.style.order=0;
+      if(allOk && !tomorrow) msg='Not scheduled tomorrow';
+    } else if(tomorrow){
+      c.style.order=1; c.classList.add('later');
+      msg=hadToday ? 'No more showings today' : 'Not showing today';
+    } else {
+      c.style.order=2; c.classList.add('done');
+      msg=allOk ? 'No more showings today \u00b7 not scheduled tomorrow' : 'No more showings today';
+    }
+    if(msg){ st.textContent=msg; st.hidden=false; }
+  });
   if(!document.querySelector('.card.now:not([hidden])')) document.getElementById('none').hidden=false;
 })();
 """
 
 
-def render(movies, soon, today, warnings, preview=False):
-    now_html = "\n".join(now_card(g, i) for i, g in enumerate(movies))
+def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
+    now_html = "\n".join(now_card(g, i, today) for i, g in enumerate(movies))
     soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
     nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
+    nice_tmrw = "Today, " + datetime.strptime(tomorrow, "%Y-%m-%d").strftime("%A, %b %-d")
     updated = datetime.now(TZ).strftime("%b %-d, %-I:%M %p %Z")
     warn = "".join(
         f'<a class="fallback" href="{html.escape(THEATER_URLS[k])}" target="_blank" rel="noopener" '
@@ -469,13 +527,13 @@ def render(movies, soon, today, warnings, preview=False):
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>In Theaters - Coachella Valley</title>
 <style>{CSS}</style></head>
-<body data-date="{today}"{' data-preview="1"' if preview else ''}>
-<header><h1>In Theaters</h1><div class="sub">Today, {nice_today} &middot; updated {updated}</div></header>
+<body data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
+<header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div></header>
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>
-<h2>Now playing <span class="sub">&middot; best rated first</span></h2>
-<p class="empty" id="none" hidden>No more showings today.</p>
+<h2>Now playing <span class="sub">&middot; still showing today first, then by rating</span></h2>
+<p class="empty" id="none" hidden>Nothing scheduled.</p>
 <section class="grid">
 {now_html}
 </section>
@@ -545,18 +603,41 @@ def get_soon(now_ids, today):
     return soon
 
 
+def mock_showings(now):
+    """Sample data placed around the current time so every card state can be seen."""
+    t = lambda h: (now + timedelta(hours=h)).replace(second=0, microsecond=0)
+    tm = lambda hh, mm=0: (now + timedelta(days=1)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+    S = lambda th, title, ts, imax=False: dict(theater=th, title=title, ts=ts, imax=imax,
+                                              url=THEATER_URLS[th], tmdb_id=None, poster=None)
+    out = []
+    for th in ("festival", "cinemark", "regal"):
+        out += [S(th, "Playing Now And Tomorrow", t(h)) for h in (-4, -1.5, 1, 3)]
+        out += [S(th, "Playing Now And Tomorrow", tm(h)) for h in (13, 16, 19)]
+    out += [S("cinemark", "Mixed Theaters", t(-3)), S("cinemark", "Mixed Theaters", tm(14)), S("cinemark", "Mixed Theaters", tm(18, 30)),
+            S("regal", "Mixed Theaters", t(-2)), S("regal", "Mixed Theaters", t(1.5)), S("regal", "Mixed Theaters", t(2.5), True)]
+    out += [S("regal", "Last Day Today", t(-2)), S("regal", "Last Day Today", t(2))]
+    out += [S("festival", "Done Today Back Tomorrow", t(-5)), S("festival", "Done Today Back Tomorrow", t(-2)),
+            S("festival", "Done Today Back Tomorrow", tm(12)), S("festival", "Done Today Back Tomorrow", tm(15, 15)),
+            S("festival", "Done Today Back Tomorrow", tm(18, 30))]
+    out += [S("cinemark", "Starts Tomorrow", tm(19)), S("regal", "Starts Tomorrow", tm(19, 30), True)]
+    out += [S("cinemark", "Missed It", t(-6)), S("cinemark", "Missed It", t(-3)), S("regal", "Missed It", t(-2.5))]
+    today = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    return [s for s in out if s["ts"].strftime("%Y-%m-%d") in (today, tomorrow)]
+
+
 def main():
     mock = "--mock" in sys.argv
-    today = datetime.now(TZ).strftime("%Y-%m-%d")
-    showings, warnings = [], []
+    now = datetime.now(TZ)
+    today = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    showings, warnings, tmrw_ok = [], [], []
 
     if mock:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import mock_data
-        today = mock_data.TODAY
-        showings = (parse_festival(mock_data.FESTIVAL, today) + parse_cinemark(mock_data.CINEMARK, today)
-                    + parse_regal(mock_data.REGAL_HTML, today))
-        soon = mock_data.SOON
+        showings = mock_showings(now)
+        tmrw_ok = [k for k, _ in THEATERS]
+        soon = [{"id": 100 + i, "title": f"Upcoming Sample {c}", "release_date": (now + timedelta(days=d)).strftime("%Y-%m-%d"),
+                 "poster_path": None} for i, (c, d) in enumerate([("A", 6), ("B", 11), ("C", 13), ("D", 20)])]
         use_tmdb = False
     else:
         if not os.environ.get("TMDB_API_KEY"):
@@ -570,6 +651,15 @@ def main():
             except Exception as e:  # noqa: BLE001
                 print(f"{THEATER_NAMES[key]}: FAILED - {e}")
                 warnings.append((key, str(e)))
+                continue
+            try:  # tomorrow is a bonus: if it fails the page simply makes no claims about tomorrow
+                got = fn(tomorrow)
+                print(f"{THEATER_NAMES[key]}: {len(got)} showtimes tomorrow")
+                showings += got
+                if got:
+                    tmrw_ok.append(key)
+            except Exception as e:  # noqa: BLE001
+                print(f"{THEATER_NAMES[key]}: tomorrow not available - {e}")
         if len(warnings) == len(THEATERS):
             sys.exit("All theaters failed; keeping the previously published page.")
 
@@ -587,8 +677,8 @@ def main():
             f.write("### Theaters that failed\n" + "".join(f"- **{THEATER_NAMES[k]}**: `{r[:400]}`\n" for k, r in warnings))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write(render(movies, soon, today, warnings, preview=mock))
-    print(f"OK: {len(movies)} movies today, {len(soon)} upcoming -> {OUT}")
+        f.write(render(movies, soon, today, warnings, tomorrow, tmrw_ok))
+    print(f"OK: {len(movies)} movies, {len(soon)} upcoming -> {OUT}")
 
 
 if __name__ == "__main__":
