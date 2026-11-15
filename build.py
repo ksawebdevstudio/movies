@@ -661,9 +661,8 @@ def now_card(g, i, d0):
                  f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></span>{groups}</a>')
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
     gen = f' data-genre="{html.escape(" / ".join(g["genres"]))}"' if g.get("genres") else ""
-    return (f'<article class="card now" tabindex="0"{rt}{gen}><div class="pwrap">{poster_html(g, i)}'
-            f'<div class="ov"><h3>{html.escape(g["title"])}</h3><div class="meta">{rating}</div></div></div>'
-            f'<div class="body"><div class="status" hidden></div>{rows}</div></article>')
+    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
+            f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
 
 def soon_card(m, i):
@@ -778,23 +777,11 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
   #sheet{align-items:flex-end;padding:0}
   .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0;padding:16px 14px 24px}
   .shead > img,.shead > .poster{width:76px}}
-/* "Now playing" tiles: poster first, title + rating over it, theater blocks below, columns of
-   different heights (masonry, laid out by the script; without it a normal grid is shown) */
-.card.now{background:transparent;border:0;overflow:visible}
-.pwrap{position:relative;border-radius:14px;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.35);transition:filter .12s}
-@media (prefers-color-scheme:light){.pwrap{box-shadow:0 4px 14px rgba(0,0,0,.14)}}
-.card.now:hover .pwrap{filter:brightness(1.08)}
-.pwrap .ov{position:absolute;left:0;right:0;bottom:0;padding:44px 10px 9px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.86));color:#fff;pointer-events:none}
-.pwrap .ov h3{color:#fff;margin:0 0 2px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
-.pwrap .ov .meta{margin:0;font-size:.8rem}
-.pwrap .ov .rating.few,.pwrap .ov .votes,.pwrap .ov .rating.none{color:#cfd3da}
-.card.now .pwrap .poster span{display:none}
-.card.now .body{padding:4px 0 0}
-.card.now .status{margin:4px 2px 2px}
-.card.now:focus-visible{outline:2px solid var(--acc);outline-offset:3px;border-radius:14px}
+/* "Now playing" cards keep their look; only the columns differ in height (masonry, laid out by the
+   script; without it a normal grid is shown) */
 .grid.masonry{display:flex;gap:16px;align-items:flex-start}
 .grid.masonry .mcol{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0}
-@media (max-width:700px){.grid.masonry,.grid.masonry .mcol{gap:12px} .pwrap .ov h3{font-size:.9rem} .pwrap .ov{padding:36px 8px 7px}}
+@media (max-width:700px){.grid.masonry,.grid.masonry .mcol{gap:10px}}
 .empty{color:var(--mut)}
 footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
 footer h2{color:var(--fg)}
@@ -889,7 +876,7 @@ JS = """
   function dur(m){ m=+m; return Math.floor(m/60)+'h '+(m%60<10?'0':'')+(m%60)+'m'; }
   function open(card){
     sb.innerHTML='';
-    var head=el('div','shead'), pv=card.querySelector('.pwrap > img, .pwrap > .poster');
+    var head=el('div','shead'), pv=card.querySelector(':scope > img, :scope > .poster');
     if(pv) head.appendChild(pv.cloneNode(true));
     var ht=el('div','stitle'); ht.appendChild(el('h3',null,card.querySelector('h3').textContent));
     ht.appendChild(card.querySelector('.meta').cloneNode(true));
