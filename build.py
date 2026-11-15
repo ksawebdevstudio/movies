@@ -677,8 +677,8 @@ def soon_card(m, i):
 
 
 CSS = """
-:root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--acc:#f5b301;--chip:#262b36}
-@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--acc:#b97d00;--chip:#eef0f4}}
+:root{--bg:#111318;--fg:#eceef2;--mut:#9aa1ad;--card:#1b1e26;--line:#2b303b;--cline:#414858;--acc:#f5b301;--chip:#262b36}
+@media (prefers-color-scheme:light){:root{--bg:#f5f6f8;--fg:#15171c;--mut:#616977;--card:#fff;--line:#e3e6eb;--cline:#a7abb3;--acc:#b97d00;--chip:#eef0f4}}
 *{box-sizing:border-box}
 body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
 header,main,footer{max-width:1100px;margin:0 auto;padding:16px}
@@ -687,7 +687,7 @@ h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
 @media (max-width:700px){.grid{grid-template-columns:repeat(2,1fr);gap:10px}}
-.card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--line)}
+.card{background:var(--card);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--cline)}
 .card img,.poster{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
 .poster{background:linear-gradient(160deg,#3a4a66,#1c2233);display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;color:#fff;font-weight:600}
 .body{padding:10px}
@@ -723,7 +723,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t.past{opacity:.45;text-decoration:line-through}
-.times.d1 .t{background:transparent;border:1px dashed var(--line)}
+/* tomorrow: dashed outline in the theater's colour at half strength (plain colour where color-mix is unsupported) */
+.times.d1 .t{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent)}
 .lab{flex-basis:100%;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
 .status{font-size:.78rem;color:var(--mut);margin:-2px 0 8px;font-weight:600}
 .card.now:not(.later):not(.done) .status{color:var(--acc)}
@@ -732,6 +733,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .card.done{opacity:.6} .card.done img,.card.done .poster{filter:grayscale(1)}
 .t.imax{border:1px solid var(--acc)} .t.imax b{color:var(--acc);font-size:.68rem;letter-spacing:.03em}
 .t.fmt{border:1px solid var(--tc)} .t.fmt b{color:var(--tc);font-size:.62rem;letter-spacing:.03em}
+.times.d1 .t.imax{border:1px solid var(--acc)} .times.d1 .t.fmt{border:1px solid var(--tc)}
 .soon .body{padding:8px 10px 10px}
 .badge{position:absolute;top:8px;left:8px;background:var(--acc);color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
 .fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
@@ -773,6 +775,12 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .c.past{opacity:.4;text-decoration:line-through}
 .c.imax{border:1px solid var(--acc)} .c.imax b{color:var(--acc);font-size:.7rem}
 .c.fmt{border:1px solid var(--tc,#888)} .c.fmt b{color:var(--tc,#888);font-size:.66rem}
+/* popup chips look exactly like the chips on the cards */
+.sth .c{background:rgba(255,255,255,.07);color:var(--fg)}
+@media (prefers-color-scheme:light){.sth .c{background:rgba(255,255,255,.85);color:#15171c}}
+.sth .c.past{opacity:.45}
+.sth .sgrp.tm .c{background:transparent;border:1px dashed var(--tc,#888);border-color:color-mix(in srgb,var(--tc,#888) 55%,transparent)}
+.sth .sgrp.tm .c.imax{border:1px solid var(--acc)} .sth .sgrp.tm .c.fmt{border:1px solid var(--tc,#888)}
 @media (max-width:700px){
   #sheet{align-items:flex-end;padding:0}
   .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0;padding:16px 14px 24px}
@@ -864,7 +872,7 @@ JS = """
   var sheet=document.getElementById('sheet'), sb=sheet.querySelector('.sheet-body');
   function el(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
   function chips(group,label){
-    var w=el('div','sgrp'); w.appendChild(el('div','slab',label));
+    var w=el('div','sgrp'+(label==='Tomorrow'?' tm':'')); w.appendChild(el('div','slab',label));
     var box=el('div','schips');
     group.querySelectorAll('.t').forEach(function(t){
       var c=el('span','c'+(t.classList.contains('past')?' past':'')+(t.classList.contains('imax')?' imax':'')+(t.classList.contains('fmt')?' fmt':''));
