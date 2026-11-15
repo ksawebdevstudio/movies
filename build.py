@@ -37,6 +37,7 @@ THEATERS = [
     ("regal", "Regal Rancho Mirage"),
 ]
 THEATER_NAMES = dict(THEATERS)
+SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal"}  # used on phones
 # Where the "open showtimes" link goes when a theater could not be read.
 THEATER_URLS = {
     "festival": "https://festivaltheaters.com/buy-tickets/",
@@ -409,7 +410,8 @@ def now_card(g, i, d0):
                 lab = f'<span class="lab">{label}</span>' if label else ""
                 groups += f'<div class="times {"d0" if want_today else "d1"}">{lab}{chips}</div>'
         rows += (f'<div class="th" data-th="{key}"><a class="thn" href="{html.escape(items[0][1])}" target="_blank" '
-                 f'rel="noopener">{html.escape(name)}<i>&#8599;</i></a>{groups}</div>')
+                 f'rel="noopener"><span class="full">{html.escape(name)}</span>'
+                 f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></a>{groups}</div>')
     return (f'<article class="card now">{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
             f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
@@ -443,7 +445,27 @@ h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .
 h3{margin:0;font-size:.95rem;line-height:1.25}
 .meta{margin:4px 0 8px;font-size:.85rem}
 .rating{color:var(--acc);font-weight:600} .rating.few{color:var(--mut)} .votes{color:var(--mut);font-size:.75rem;margin-left:6px} .rating.none{color:var(--mut);font-weight:400}
-.th{padding:8px 0;border-top:1px solid var(--line)}
+.th{--tc:#888;--tb:rgba(136,136,136,.10);margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--tb)}
+/* three clearly different hues: red / green / blue */
+.th[data-th="cinemark"]{--tc:#f0506a;--tb:rgba(240,80,106,.17)}
+.th[data-th="regal"]{--tc:#2fc48a;--tb:rgba(47,196,138,.16)}
+.th[data-th="festival"]{--tc:#5b8cff;--tb:rgba(91,140,255,.18)}
+@media (prefers-color-scheme:light){
+.th[data-th="cinemark"]{--tc:#d7193a;--tb:rgba(215,25,58,.08)}
+.th[data-th="regal"]{--tc:#0f9d64;--tb:rgba(15,157,100,.09)}
+.th[data-th="festival"]{--tc:#2d63e0;--tb:rgba(45,99,224,.09)}}
+.th .thn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none;margin:4px 6px 0 0}
+.th .thn{justify-content:flex-start} .th .thn i{margin-left:auto}
+.th .t{background:rgba(255,255,255,.07)}
+@media (prefers-color-scheme:light){.th .t{background:rgba(255,255,255,.85)}}
+.th.off{opacity:.7}
+.thn .short{display:none}
+@media (max-width:700px){
+.thn .full{display:none} .thn .short{display:inline}
+.th{padding:6px 7px;margin-top:6px}
+.times{gap:4px}
+.t{font-size:.74rem;padding:3px 6px}
+.body{padding:8px}}
 .thn{display:flex;justify-content:space-between;gap:6px;font-size:.78rem;font-weight:600;color:var(--fg);text-decoration:none;line-height:1.2}
 .thn i{font-style:normal;color:var(--mut)} .thn:hover{color:var(--acc)}
 .times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
