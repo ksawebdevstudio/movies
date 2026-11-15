@@ -10,6 +10,7 @@ page is still built and shows a notice. If all three fail, the script exits with
 an error so the previously published page stays online.
 """
 import base64
+import gzip
 import html
 import json
 import os
@@ -17,7 +18,9 @@ import re
 import sys
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -26,10 +29,13 @@ UA = "Mozilla/5.0 (compatible; PersonalShowtimesPage/1.0)"
 TMDB = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p/w342"
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "index.html")
+# Problems found during a run (not published). The workflow reads it and marks the run as failed.
+PROBLEMS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "problems.txt")
 
 HIDE_NON_IMAX_3D = True   # you only watch 3D in IMAX, so other 3D showtimes are dropped
 MAX_UPCOMING = 12        # how many "coming soon" cards
 UPCOMING_DAYS = 28       # only releases within this many days from today
+MIN_SHOWTIMES = 3        # fewer showtimes than this for a theater on a day = probably broken, raise an alert
 
 # Order = display order on the cards.
 THEATERS = [
@@ -68,19 +74,38 @@ FESTIVAL_CIRCUIT_ID = "106"
 
 # ---------------------------------------------------------------- http helpers
 def http(url, data=None, headers=None, tries=3):
-    h = {"User-Agent": UA, "Accept": "application/json, text/html;q=0.9"}
+    """GET/POST with gzip, a 20 s timeout and retries only for errors that can go away
+    (network trouble, 5xx, 429). A 403/404 fails at once instead of wasting seconds."""
+    h = {"User-Agent": UA, "Accept": "application/json, text/html;q=0.9", "Accept-Encoding": "gzip"}
     h.update(headers or {})
     body = json.dumps(data).encode() if data is not None else None
     last = None
     for i in range(tries):
         try:
             req = urllib.request.Request(url, data=body, headers=h)
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return r.read().decode("utf-8", "replace")
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raw = r.read()
+                if r.headers.get("Content-Encoding") == "gzip":
+                    raw = gzip.decompress(raw)
+                return raw.decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code < 500 and e.code not in (408, 429):
+                break
         except Exception as e:  # noqa: BLE001
             last = e
-            time.sleep(2 * (i + 1))
+        if i < tries - 1:
+            time.sleep(1.5 * (i + 1))
     raise RuntimeError(f"{url}: {last}")
+
+
+def pmap(fn, items, workers=8):
+    """Run fn over items in parallel threads; results in input order."""
+    items = list(items)
+    if not items:
+        return []
+    with ThreadPoolExecutor(max_workers=min(workers, len(items))) as ex:
+        return list(ex.map(fn, items))
 
 
 def la(dt_utc):
@@ -222,26 +247,27 @@ def fetch_cinemark(today):
     return parse_cinemark(json.loads(http(f"{CINEMARK_BASE}/papi/theaters/{CINEMARK_ID}/showtimes?{q}")), today)
 
 
-def fetch_regal(today):
-    """Regal's own site first; if it refuses this server (or has nothing for that day),
-    use BigScreen's listing for the same theater."""
+def fetch_regal(day, official=True):
+    """Regal's own theatre page first (it only holds today's schedule); if it refuses this
+    server or has nothing, use BigScreen's listing for the same theater."""
+    e1 = "skipped (the theatre page only lists today)"
+    if official:
+        try:
+            got = parse_regal(http(REGAL_THEATRE, tries=2), day)
+            if got:
+                return got
+            e1 = "no showtimes for that day on the theatre page"
+        except Exception as e:  # noqa: BLE001
+            e1 = e
+        print(f"  Regal official site: {e1}; trying BigScreen")
     try:
-        got = parse_regal(http(REGAL_THEATRE, tries=2), today)
-        if got:
-            return got
-        e1 = "no showtimes for that day on the theatre page"
-    except Exception as e:  # noqa: BLE001
-        e1 = e
-    print(f"  Regal official site: {e1}; trying BigScreen")
-    try:
-        got = parse_bigscreen(http(BIGSCREEN_REGAL.format(date=today), tries=2), today)
+        got = parse_bigscreen(http(BIGSCREEN_REGAL.format(date=day), tries=2), day)
     except Exception as e2:  # noqa: BLE001
         raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: {e2}") from None
     if not got:
-        raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {today}")
-    note = "Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page."
-    if note not in NOTES:
-        NOTES.append(note)
+        raise RuntimeError(f"regmovies.com: {e1} | bigscreen.com: page loaded but no showtimes for {day}")
+    if official:
+        NOTES.append("Regal showtimes via BigScreen Cinema Guide (bigscreen.com); times link to Regal's theater page.")
     return got
 
 
@@ -259,7 +285,20 @@ def fetch_festival(today):
 
 
 # ------------------------------------------------------------------------ TMDB
+TMDB_STATS = {"ok": 0, "fail": 0}
+
+
 def tmdb(path, **params):
+    try:
+        out = _tmdb(path, **params)
+        TMDB_STATS["ok"] += 1
+        return out
+    except Exception:
+        TMDB_STATS["fail"] += 1
+        raise
+
+
+def _tmdb(path, **params):
     key = os.environ["TMDB_API_KEY"].strip()
     params.setdefault("language", "en-US")
     headers = {}
@@ -364,7 +403,18 @@ def info_genres(info):
     return [n.replace("Science Fiction", "Sci-Fi") for n in names if n][:2]
 
 
+def prefetch_tmdb(showings):
+    """Do all TMDB lookups up front, in parallel; build_movies then reads the cache."""
+    ids = {s["tmdb_id"] for s in showings if s["tmdb_id"]}
+    titles = {(s["title"], s.get("year")) for s in showings if not s["tmdb_id"]}
+    titles |= {(s["title"], None) for s in showings if s["tmdb_id"]}  # fallback if an id lookup fails
+    pmap(tmdb_by_id, ids)
+    pmap(lambda ty: tmdb_by_title(*ty), titles)
+
+
 def build_movies(showings, use_tmdb):
+    if use_tmdb:
+        prefetch_tmdb(showings)
     groups = {}
     for s in showings:
         info = None
@@ -387,6 +437,18 @@ def build_movies(showings, use_tmdb):
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s["imax"])] = s["url"]
         if s.get("poster"):
             g["alt_posters"].setdefault(s["theater"], s["poster"])
+    # a title that TMDB did not recognise in one theater but did in another: fold it in
+    by_norm = {norm(g["title"]): g for k, g in groups.items() if k[0] == "tmdb"}
+    for k in [k for k in groups if k[0] == "t"]:
+        target = by_norm.get(k[1])
+        if target:
+            src = groups.pop(k)
+            for th, shows in src["by_theater"].items():
+                target["by_theater"].setdefault(th, {}).update(shows)
+            for th, pst in src["alt_posters"].items():
+                target["alt_posters"].setdefault(th, pst)
+            target["th_rt"] = target["th_rt"] or src["th_rt"]
+            target["th_genre"] = target["th_genre"] or src["th_genre"]
     movies = list(groups.values())
     for g in movies:
         g["runtime"] = g["th_rt"] or g["runtime"]
@@ -407,7 +469,8 @@ def fmt_time(ts):
 
 def poster_html(g, i):
     if g["poster"]:
-        return (f'<img src="{html.escape(g["poster"])}" alt="{html.escape(g["title"])}" loading="lazy" '
+        lazy = "eager" if i < 8 else "lazy"
+        return (f'<img src="{html.escape(g["poster"])}" alt="{html.escape(g["title"])}" loading="{lazy}" decoding="async" '
                 f'onerror="var d=document.createElement(\'div\');d.className=\'poster\';'
                 f'd.textContent=this.alt;this.replaceWith(d)">')
     h = (i * 47) % 360
@@ -448,7 +511,7 @@ def now_card(g, i, d0):
                  f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></span>{groups}</a>')
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
     gen = f' data-genre="{html.escape(" / ".join(g["genres"]))}"' if g.get("genres") else ""
-    return (f'<article class="card now"{rt}{gen}>{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
+    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}<div class="body"><h3>{html.escape(g["title"])}</h3>'
             f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
 
@@ -523,6 +586,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .fallback small{display:block;color:var(--mut);font-size:.78rem}
 .fallback em{font-style:normal;white-space:nowrap;background:var(--acc);color:#111;font-weight:600;font-size:.85rem;padding:6px 12px;border-radius:999px}
 .card.now{cursor:pointer;transition:border-color .12s}
+.card.now:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .card.now:hover{border-color:var(--mut)}
 #sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}
@@ -570,11 +634,12 @@ JS = """
   var day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date());
   var now=Date.now()/1000, cards=document.querySelectorAll('.card.now');
   var hide=function(el){ if(el) el.hidden=true; };
-  if(day!==d0 && day!==d1){ document.getElementById('stale').hidden=false; return; }
-  var rolled=(day===d1);            /* past midnight: yesterday's "tomorrow" is today now */
+  var stale=(day!==d0 && day!==d1);
+  if(stale) document.getElementById('stale').hidden=false;
+  var rolled=!stale && (day===d1);            /* past midnight: yesterday's "tomorrow" is today now */
   if(rolled){ var s=document.getElementById('daylabel'); if(s) s.textContent=B.dataset.d1nice; }
   var allOk=!rolled && ok.length>=+B.dataset.nth;
-  cards.forEach(function(c){
+  if(!stale) cards.forEach(function(c){
     var upcoming=0, hadToday=0, tomorrow=0;
     c.querySelectorAll('.th').forEach(function(r){
       var a=r.querySelector('.times.d0'), b=r.querySelector('.times.d1'), up=0;
@@ -601,7 +666,15 @@ JS = """
     }
     if(msg){ st.textContent=msg; st.hidden=false; }
   });
+  if(stale) cards.forEach(function(c){ c.querySelectorAll('.th').forEach(function(r){
+    r._today=r.querySelector('.times.d0'); r._tmrw=r.querySelector('.times.d1'); }); });
   if(!document.querySelector('.card.now:not([hidden])')) document.getElementById('none').hidden=false;
+
+  /* a page kept open (or a home-screen app resumed hours later) reloads itself to get fresh times */
+  var loaded=Date.now();
+  function maybeReload(){ if(document.visibilityState==='visible' && Date.now()-loaded>10*60*1000) location.reload(); }
+  document.addEventListener('visibilitychange', maybeReload);
+  window.addEventListener('pageshow', function(e){ if(e.persisted) maybeReload(); });
 
   /* ---- popup with the full schedule, opened from the poster ---- */
   var sheet=document.getElementById('sheet'), sb=sheet.querySelector('.sheet-body');
@@ -662,7 +735,10 @@ JS = """
     var c=e.target.closest('.card.now');
     if(c) open(c);
   });
-  document.addEventListener('keydown',function(e){ if(e.key==='Escape' && !sheet.hidden) close(); });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape' && !sheet.hidden){ close(); return; }
+    if((e.key==='Enter'||e.key===' ') && e.target.classList && e.target.classList.contains('now')){ e.preventDefault(); open(e.target); }
+  });
 })();
 """
 
@@ -695,6 +771,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <meta name="apple-mobile-web-app-title" content="Showtimes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#111318">
+<link rel="preconnect" href="https://image.tmdb.org">
 <style>{CSS}</style></head>
 <body data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
 <header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div></header>
@@ -734,16 +811,24 @@ ICONS = {
     32: "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAERklEQVR42u2XzWucVRTGf+e+X5OZaWrTJmli048EbUlLbC1KoSqIX3+A6EoqVNCFGzeCGzG6cyNuFFwo2bjxDyhFWoorC0qxlNbapsSPNjFtJzGf77xf97i4M5NJUrSFQgR7h3dgZu4959znee5zz8jAnseUDRw+bGh+fN3Y/P8BBNCNpgD+9wisL8CIe+7nsOqeO4iwbSgYo8SpIU4NRlx5/1ZLc44qKNJaR+N7q0IpsJQji7WyKuAqCozAct0wPFDn2LOzdIQWVZC7QEMVPANRoCwnggittfXM8PV3D3H+1w4qkV2FhPQN7FNwE7Nc6Nmc8+0HE/T35ZDdxfZb1UMWw9WpkOGhFIo2eAK4edPjxQ/3cKMWEAba2rffxMqIEieGxwdj+rfmzNYMvnd3uVXB95S5JY/rtYDB3ow0lxZyeQE9WwqeGIoZnwwpBZZCZbUIFcWqEvoWQqcFzzQFJKgajBSNhG6xGMWq49Qz7nNeuGJyuyJkqwIBhIHFquJeazSgFgLP8vstn0vXQvb2p9QzF6EaWRBLlgsK+JFFC0hTQyWwoJAh+Aa6qgV5IfgeFNZRUC1ZLk+ETEz7hJ5FbQM2wKt2bh1tUeVZJmc8vji5hW2dBUf2JmCVUz9v55vzR9jTOcFiKpw8McRMXenvjhm7sJMzk92MdM6Q43FlMmT/YMpUzacjVCoVZez0Zl75+GGmZj2iUNE2YXmVTV2jK2qBwHPn9aeJEsefn+PqZMhHV07xZ997nL1cJ/q+xkvTLzM/0cXns8t8efQtzux4Gi7+xjPbprkdB8wtGI592s9i3TC8I+HNz/qYjw0dYdMLtF27ytoLqXmEtGEeKj7GQK4+WME3gochtwY1BjyhUIMAka+UI8ti7ARULTldrDc2l9erVLeMNi3DGEhzoZ4K779a46n9dboqOd3pCezUad45PMbAgducnp0mPHSB147eoOPCNQ7+cY63H71EHZ/xSZ+RXSmvPzfHyK6ETWVL6MHJc1UHudek321aevqGtGVCqXB4KOGTN25yYGdCmjnRVUI3OStcoRIqYiFLDSXPut8Q/lo0XJ0KefKRmKwQjEBuoRQoF69HvPtVN2d/KVGOtGVGpom1oCQZ7O5JObgvYakuLStdTAwLiU+aC2kOyZIhjg2FKguZYT7zKApH10LsQhbWJRdgsS6M7E0Y3J6SZCBoi+M2H3DvaS6QgrVCIdrGV4FdxZ87ujSCWYHcCnkBhQrWrli4tQJpIzbrfKA5CToCy7nxkOkZj97e4t6sWCDyc4YHhFJZKdl2K1Zqtw0/XgkphYq1K7qXbb27tf0yWkqEQ4Mpx1+YpxzqPbULRpTQp2VgzRNVz4SxU5v4YTyi0sa/K6Bn16oUxsBy4k6CZ+69Y1x7ewpOD6VQnfjsP/UDjcnl0FKJ7m9D4oQp6xi9Y0dUrPem+1XGurAPuuKNR+DBf8ONRuBvC6QgLFTJyGUAAAAASUVORK5CYII=",
 }
 
+# Android "maskable" version: same ticket, smaller, so round/squircle masks never cut it.
+ICON_MASKABLE = "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AABEyUlEQVR42u3debhlVX3n/89ae+8zn3OnmqgqQETmSQahEIUiGhVtQBONv0gwv5j+xSFGg5qkjem0T7pN0kZN4mzsVhMEWzGKorFjVAZFqhAxIChiGJSqoqY7nvnsvdf6/bHvrYEaqKo71B3er+c5jz4U1F333Hv2+qzpu8yxJ5zjBQAAlhTLWwAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAACAAAAIAAAAAACAAAAIAAAAIAFK5Q87wIAAMwAAAAAAgAAACAAAAAAAgAAACAAAAAAAgAAACAAAAAAAgAAACAAAAAAAgAAANDslQKmEjAAAMwAAAAAAgAAACAAAAAAAgAAAFiQQvYAAgDADAAAACAAAAAAAgAAACAAAAAAAgAAACAAAAAAAgAAAND8uQyI24AAAGAGAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAAgAAACAAAAAAAgAAAFgkQnneBAAAmAEAAABLYAaAKQAAAJgBAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAHDUhJQBAgCAGQAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAHCYQon7AAEAYAYAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAgI5aISDqAAEAwAwAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAADQYd4GyHWAAAAwAwAAAJbADADjfwAAmAEAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAIAAAAAAloZQnjcBAABmAAAAAAEAAABoES4BsAYAAAAzAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAALEWh5z0AAIAZAAAAQAAAAAAEAAAAQAAAAAALUiixDRAAAGYAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAACA5ksdAMoA4CCM2f3/A8svCzDfOW/knSQjeT6yOHghIGBfgZWM8erG2SSR99JIO8geKIb3B5iPvJcKOa9i5ORllI+cJCl1hjAAAgCevtPvJUbNllUvMVq7LJa8lIu8/uBlY8qFnhAAzMeRvzPK5b1+8FBRdz1cUiFyemI4krxULTpFoZc1XqnjwwsCAPbo+L2XJlpWSWo0WE106bl1Pe+Mll5x4bgKuWzosHwwzXaNMJIANF93dXUb0lgzUJIafeHOPk20A33xrj5tHQnVia0qBacw8HLO8FFe4swxa0/ld2AJr+8bSRNtKyPpJefXdclpLV19wYRWD8aKSlKvubu/n1oOADCPR3WBVxhkn9pcUZKTRuqBfvRoQR+8ZUg/erSokXqgaskptMwIEACwBEf92fp+nErrz2zqTS8d0eVnNRTmpF5bilOjNDV7bfwzPCcALZS9AFK29m+MFAVehYJX3JO2joX63Pf69XdfXaaJVqD+Sirv2TBIAMDi/4FPjhDqnUB9pVR//7tbdNW6uuSlRtvIuazTp7MHFpfUSdZkn/98Vbr1h2X9/VeHdPuDZRVyXlHglaR88AkAWJSsyabzt4xE+s3nj+mDr9+ioVKqVtfI+WwvAIDFPzuQpEa1spOx0i0bq/qdD61VLzHqL6eEgCUkqNaWvZu3YQl0/lbqpUahld75yh36H6/ZqkreqdW1sjYLBwCWxt6fwErd2KgXW511YlcXndzS5p2RfrIpr2rByXkeCMwAYNF0/klqlKTS9X/4hK54XkPNkWwHMB0/sLRNzQb0Uuna9x+rr/6gphX9ieKEhwOlgLFoOv/PXveErrioobHtVjJ0/gCyPQETTas0Mfqnt23SVRdOaPtYqChgbEgAgBbyVF/qstdnr3tCL7mwofExq1zkqeMDYK8QkKaSS6V/um6TrnrOhIbr4a7jhCAAYAFu+mt2rD795if0kouyzj8K+UAD2P9s4a4Q8PZNWn9GQ2PNgBBAAMBCTPTDjUBXP2dCL72wofqYofMH8LQhIE6MwsDrT165Q1HgFaeGY8EEACwUQeA12gj0K2c29Mm3bFa7Y2T5SQM4xMFDs2n1/LNa+qe3PKFOz7JfaPHeBcCoUItt3T81qhSd/uTXdigXejW6lmk8aKlVwWPUOr0QUK8bvfSihtaf0dA376tosJoqTQ2XgTADgPlc4ne0YXXdlTv1/PNaqjfo/LFEOn5lJ17CQIpCL69sAyyOvG5o6qTrrtqpvlKqNM1uCwUBAPN09N/pWR2/PNa168fUnhCdP5bMqN8aqVZzqreNhuuBcoFXtewJAdMYTLSaVpee39IfXjmskUaw190gIABgXu3692r1jH7nBaNatTxRnFimQbE0Ov8g28H+ns8N6dJ3Ha/nvOMZ+rW/XqvbHiyqXMqOuOHI9hN1JqRr14/pxFU9dWOeKQQAzMvRf5JaDZSdrrlsTHFHpHUsGbmc1xs+vkp/dv1y7ZwIFKdGtz5Q0tV/sVZ3PlhUucK1t0f6XOklVsesTPTyCyc01rQ8VwgAmK+j/4tPaWmwL1WccHQHWhI33BWKXt+8p6ybN1S1dkWsICt0mW1ac0bv/dKgOrGRNZ4rb490Y3FPuuzMpmolR5AiAGA+fkjj1Gj9GU2VSox2oCUy/W8U5KQNDxfUS8xe99rHiVG56HXf4wVNTFhK205jcBH3pItPaWvNYMzgggCAedf5J1ZDlVQvu2BCvRbT/1ha2/9Luf2Xt3ZOKkRe1nJ4bbrLAOWK00vPq2usxTIAAQDzbvr/uac2tXyQ6X8sPc4fuIN39FUzEgJ8Kq0/q6mBMssABADMr+N/sdElp7aY/gcwa8sA605pa6iaMMggAEDz7CjUzgkKO2JpV/873D/D4d0T0Ghb1duW0uKLBNfDLPhaXVn1s/5yqktOayqJqdaFpScXelmzb/lfY7KqgIxWpy9OjPqqqS4+paV//feqqkUn53ljmQHAUU0AsTMaqDhdfGpbSU9c3AEtpWp13aZ0zfq6Vg4kmmgFikKvKPAKA68do4GuXT+uZUMpRWymW2fEGZUrXhef0la7xxIAAQDzZhYgdVKry4cSS/EEjNGKgUQfff1W9ZdT7RwPtG0s1Gg90GsuH9fvXzmmdtOwc30GnjNyUovOX4voNkAslg8nI38s1bXpTsfoZRc0tfHEx3XDHTWNNwNdfEpbL7qgqbhnJi+y4b2amQ2BvAcEAACYRzMBjbbRQCXV2185miXiWGq2DVcDAwQAAIt9JiBJjbrjU52+V8AiJ0AAALA0ZgK4AhtgEyAAADjgDABhWYuhFjo/RwBz/szhucMMAADMp6qAVP8DCAAAltCgNEmNwiCr/ueV1ccAQAAAsIhH/dZItZpTvW00XA+UC7yqZU8IAHTAUwDMlS2e8Q+wRDv/QEoT6T2fG9INd9Q00bI694Su3v7rw7r09LaaTaMg4L1iAwCYAQCwqORyXm/4+Cr92fXLtXMiUJwa3fpASVf/xVrd+WBR5QrXZAMEAACLRuqkQtHrm/eUdfOGqtauiBXYrBDgYDVV6oze+6VBdWIjazybAwECAAAtiul/oyAnbXi4oF5i9joBECdG5aLXfY8XNDFhFVEgCCAAAFhcS9KlnNf+JvidkwqRl7WsWAMEAACLjvMH7uAdPT9AAAAAAAQAAFo8RwGP5M8AAgAALGC50Mua7DZAPeV2wCj0+/xzAAQAAAtYYL26Tema9XWtHEg00QoUhV5R4BUGXjtGA127flzLhlJ1Y0sQAAgAABYDY7LjfisGEn309VvVX061czzQtrFQo/VAr7l8XL9/5ZjaTaPAshYAaO9SwACwgEcxVup0jF52QVMbT3xcN9xR03gz0MWntPWiC5qKe0ZpKkb/AAEAwGKcCWi0jQYqqd7+ytGsFGAsNdtm158DIAAAWKQzAUlq1B2f6vS9AhY5AQIAgKUxExBS8hdgE6CW4FnoPWuhAwDPFjADsBR+mIFXGGRTn6kzStLdU6F28oY0AHiaqxXkXHbR0tRzJQq9JCMTSpYHCQEA8+9DO9EKJEm92GiwmqpUmyyQHkudrlEvMYQBAAft9HOhV7nkpchLRuo2pJF6IO+NfCh1YsOmykXCrFpzMpM6C2oqzj/lYzv5g5RUKjgFVmp1jC4+ta11p3c0Nm51yWltrTutrf6qk9IsDMSp9ls5DVjoU9WpYxPg4bxfzktRIBXyXgqksbrVhp8WdedPi+rvc9rwk4LueqioYt7LTw4wunuFALPHHgweKAQAzFKnf/AfVeqy+9Ct9Wr3rLo9I+el/rLTqsFEV17Q0Pozm7ro1I76K069rtTpWQWWUqlY+JzLyv7mS+IY4CEGpULOKZeXxhpWGx8q6LYHyrrlnoq2joQaa1pZI+VzXsWck/NGmny+HHwZwBAGCACYi07/qTugp/4TYyVrsjvSk9QoTo3GW1Z9Jafl/amuvWxcr3vBmFYtT9VtZ9XULKMlLOAOrVzw2joaUAjoUINSUdq6I9Cnvt2v62/v046xYNczYqqUspfkvJF3uwf6h7cRkDBAAMCsdvyHfDzKeiUu2wvQ6FgdvzzW7/zKuF73wjGt7E/V7DBawsLs0IpFr/97T1lv+sQqbR8LlLpsLfvqdXV95I3blLNe3i3t3+2pR0u54LVtLNCnvtWvT3+nT7/YEalScMqFftczYuZ3+xME5qOgUht6N2/DfOr8Zy+PuV27eqVKwaneCfStfy/pc9/t0wmrYp3xjJ7ks9MDls8pFkinFoVeOydCveKv12qsGWigmqpScCrmve58sKRqIdWvnN9Wp2OX7CxX6oyiUMoXvL56d0W//tdr9S8/LCv1Rn2lVNZM7Qcwc1CrgYeLqAOAPTt+792sdv5PfWgmqVEUeA3VUjU6Vtd8YLWu/cAxqvesynmn1PFzwcLo2PJl6Ybbqto2GqpWShUn2ZJXkhotH0h1/W192jkcKB+5JXmOPXVSOe9U71ld+4FjdM0HVqvRsRqqpYoCryQ1c/i+ZM86T0EBzZNjgPwg5s+u/rkfPSWpya5PDb2+9oOKvvtgSZ9441Zdsa6p8TE7ef4XmN96Sbbh9akfJ++z/S1Ltb+JE6O+fqdvbCjr9R9bpfGWVbWYpfupOiFH6+Ch957ZAGYA6PznS5WvSsGpOTkb8I27y+rrd4oTsyArliWTI8CnvpybH5GXdmrG97gcyZ9pRpfY5tdwalfnf3dZ13xgtZodq0rBzauKfswEUAiIzl/zZzq1kPOKE6Nr3rdaN7xji664cP7PBOxZxCQfeRnjVS5mRUzktff/9qRurF2VEufyCCTtXNx7EQqRV5xmMxFmPnX+71utMMj2SkzVSJhvz0JmAo5SACB/HcXtuJqf64XhZNnPXSHgoqbqY0ZBMB87/mwvQ7nkpdBreMSq3Qv0f75W21X5MDu7LLW6Vs89taXzT+6qEjnVBpx6zexh6bxmrWgM7Zx91hy4053tDa3OGxXyTj9+LK9jlyWqFpzSo/gRT1Opb8DpGxt3d/5h6Of1vh7vPcePmAGg89c8OVa1Zwj47Nu36IXnNtXtZEWD5k1QsVK54jTWsLr93qJuf6Csr9xdUatr9eRouNeOZjP53wxVE+VzXhc+q6Pnn9XS1Rc0tHYoVhhK442Zn+k4pHY+5Xha6sz8bKff+1RXmhotm+N26gAnzFo9s9/pd2uz0rXOzd6o3E7evfGuzy7XG68Y05UXN1SvH53PSuqM8kWnf9lQ1m+9f3fn79wCeTYSAuaUWbnmJCYB6Pz3K7BSp2dUzjvd98HHVC06dbpHv2BQnBj1VZ1abaMPfGVQN363pu1jocZbgQaq2fx0ZDr7XQtOVZBzUqvrlSTZKYhzT+joba8Y1eUXtNQcnbnR64HbaTVYdgqMkQ2dEu/26pyMkawL5JxRoyfFiY5aO/srXiYwypk0G1ru2VIjpTZU6qR2R0pmuZ0HCi6lktc37ynrVe9do4FqumtXey7yGpkIdPlZTX3+nVvk45nfEzB1DHF4ItCpbz5Rl57e0hfeuVkunvu+zLmsnG+9bXXOW05Qs2tVyPmFd6KHEDCHdQCq1AGYuwnrhZdXcqFXoxPo4c05vfj8pkJ79IL6VH6qDnndel9J1/2vlfrkv/VnF5jkAlVyHcXtESltKywukwmKMkFh18ubnLrNbXJxQ8VCqEo5VJxID23K6+s/qKjXMbr4lLYqJa9298jPjB+onfJG+VAqF1O1XKqxtKdIgfqDvEITKDKBciZQ4K22xV21fKJKXqoWJJda/WSO2um9UZSTqvlE6sby9bZ8FEqVolwYyEehfC6SDwK5kaZMN1ahIJVLRrEP9NATuRlt59NN/Sex0SnH9/TQEznd+WBJxUI23J9oBQqs10fesE3PPCZWrzfzbXDeKFfy+ujXB/SdH5fU6Fj95iUTqpWcUjd3l+b4yWWZTmr1xo+u0oNPFFTKu3m55n84hYMw2zMAq5kBIAAcXBR4bdoR6T3XbtefvmZEE+NWYeDnvnxplG1Q/ODXB/WhWwY00Q60rE/qdrqKu3WVBk7QmrNfrTBf0Zozf0M2zO3q5IyRXNLT5ge+oKTb0Ob7P6/W6GMK81Xlcnklaapto4GuOL+pP3rlsNaf2dZE/fC/z/21c7xttbLm1I6liTRWf5jT8/qGdFa5T8+u9Oni2pA6LpWRZI1R16W6acdmTSSJvrxzs57sddR1TsvzkbppVu52VtrZslo24BV3vdJmV7ZaUP6ctYqetULRSSuUP2uNfDfJHs5W8r1Ure88JDV7at3+M7kdDfkkVdRfUNpzM/J+HnLnF0hpIv391wZ1wx01TbSszj2hq7f/+rAuPb2tZnPm97B4LwXWK3ZWF73jeO2sB2p1rN71qp36o1ePqN2Yu2WAJDWq9Tn95Y2Detf1K7R2eaw4XcidKAGAAEDnP29m5FJn1F9Odft7fqHBSjbNOmfHq5wUhNlD/rXvP0Zf+G5NxyxzMkrVboyrNHCcjjvvt3Xcea9VaaA/O7bW3f/fFeaz76c1OqZf3vtP+uW9/6jW2C+VK/YpF1mN1I0i6/W5P9qilxzmCYj9tzNR3hpt68SqhaHeuvZZevWKtVoZ5VUOc4rTRB3vZPf4LTGSykEkyWtn3NOPGmP6200/1/8d2aZVubzyobS9bpWb4XbayKo30pYt5VT5zeeo9MLTZQdKstWCfCeW7yW7p34mp4FsOSc5LzfeVu/hbWp87gdqf/9RBUNl5XLSyFi2qfBI2nkkI+BiyWvniFWcGi2rpopyUr1pZmUJInVGpZLTt+8t6TUfWKNc6NRNrFb1J7rrvb9QzjqlfvY/J95LYeA10gh02buO11gzm/lY+CfsCAFiCQDzYhYg9NoyEqm/nGr9eXNXVtV7KYokBdJr33eMbr67qrXLvXrdtmRyOvmyd+jMl31Ax5x2mYwpKOkkSmMnTW0A9Hu8nJT2UqU9pzBf0oqTLtIxp79a+WK/xjbdo163o2o5kpfXTd+r6ezjuzrzWT112k+/72F/7Tx2WaLEGW3udvXCwRV6/4ln67XHPEORMUq8VyONlXg/1bS9Xs00UceliozRaeWarhw6RuUg1MaJUY30Eq0oGTlp+u3cWNXaFanSVIp3NFV8zgnq+8MXqHLVOTLWSImTa3alxO0+7D514N15+XYvmxUIA4XHD6n4vGfJFiP1HtyieKKrSn8o77xuuvPw2nkkIdVL6nSsSnmvUt4pTo26PTNr+w+cM8oXvf73v/bp1h+XVSs5GSONNwNdekZLz1ybZMsOZvY3/pWrXh/+6oC+srGqWimVc4uh8yQAEAAY/c+T7yKrJf7QprxeefGEqgUnN8trnFP9duyMfvfvsk51Zb9Tu9VWlO/TOS//mE587qslV1DSTSRvZGwgY+zkSPUpL2NkjM3+3HmlvVRhrqRVp12k0sBZ2vnIt9VrN5SLshDwxTtrOuu4rk4+tqc4PvD9CPtr5zH9qZqxFMrqj487We995lk6pVTVcNyRZGQkBcbIGKP9tFTWGNnJN7eVpjLG6EVDx+i8Sr8299p6sFFXfy5U6qfRzo1VrRxM1e04yRrVrl2nvjdfrvD4IaXDrV3PYGPN7pH/vg3dfc6uE0tGKj7vWYpOXiG3vaHuY8OKKjl5d+jtnE53YW02wzH1uzlbna/32dJYp2P1X65frji1k1/Pq9Gx2jYW6hXPbUizfAHR1D6dHWOB3vrJVfIyi2wPHSFAVALEfNgQmI+cfrEj0me+1ad8SbO+wShJjCoDXh/7Wn82TT3o1Wm3tfLkl2j9m7+vlSetV3s8yQqJ2PDwnrTGyNhQ3nu1xxOtPGl99nee/BL1um3lc4GMkd7w0VVqtLJpa+cPrZ2rBxJ1EsnL6xOnnKs/O+EMOUljSU+RsYf9SAsmQ8KOXluX9S/Tl868WC8dWqUd3Z5KUXYA/kjaecxgqriXpYKBd16hvjdeJnkvP9GWiezhP3uDLHgl2+vKn3ucht776ypefKLi0bZyeXPI7+dMzAaYOTj7H+Wlux4qaPNwpCj0uy7TqRS97n2koOHRYNc/n9VjfyXpM9/KbvVbqvcdgADA6F+zP9VYLTl95jv92rQ1nNWHTZoa1WpOd/ywqL+7ZVDHLEvVbrcVFWo6+6oPKSrUlMRp1vFPa5SQBYEkTvf6u3udlop5abwV6K3/sFK5/P6/yj7tHErUS4yaaaL/fcr5unLZam3vtnaN+KcjZ6zGklixc/rsaRfqsv7l2tGLVT3idkq+3dPgu16q4mUnK3lyPOs5pzlnbqJAvt6RT1IN/sVVyp93nOKxrgrFp2/nQgrEQU667YGSJlq7N/t5L4XWaaQR6PrbarL52bthbyqUb9oa6jPf6Ve1tJB3/S+NZygBAAu83KnTo1sj3byhonxldmYBvJeCIDvP/D//eUgT7UBGTjYs6OyrPqwon1fSTWVMMIOjxkBJN1WUz+vsqz4sGxWUpF7lvNeXN1T1tQ0VFYp7F1TZt51WoTVqpqmuXrZaLxs6RiO9rvJHMOo/kNAYxd4pNEZ/fNzJqgWhYudVzrvDaqcJjFw7UeHSk1R43rPkRlsyUTCzRSTiVAqtateuky3nlCbZ2vyXN+6/nQttNmzTllA3b6yqv7J3x+u8UTHv9dnb+9RqWEV2doJy6ozyFenmDRU9ujVSgdE/CAAk19l++BXzXrc9UFJ98ljXTD90nDPKl7w+eHO/vnFvRcv7pXZzTCde/BatPftyJb1UxgYz/r0ZGyjppVp79uU68eK3qNcelWygQs7rLZ9cqSeHQ4V7TOnu086aUyNO1R9G+tsTz1bXpbNS4zw0RuNJT5cPrNQfrDlRT3Y7Co055HYu63NK2olMNa+B61649+5+zWwlKT/RVn7dCaq86nylO5syoVUh2n87Z/oCo0OVOHPAy4729+rEVlEx63h/viW3z0zY1Lr81tFQ9z6Sl81ntxUeztd4uuWRqZ3/9brVbQ+UVMzP7lIDz1ICAJDVPc95/eDnRaWxZvycc1ZZzanVtPrcd/s0VE3V7XZV7j9ea8/9LXUbblY6/z1DQLfhtPbc31K5/3ilcVfFvNeTo6FuvquiwuSsx/7aGafZNP/fP+sc1cJIPedm7QMWGquxuKs3rj5RL1+2WmNJovKhtjPJNvYNvO1XZSr5bKQ+WzPHYSA30lLlleeruP5kpfWuioV92zlT3USSml0X3/jJSoFPt8WsVsvuMaj1OdX6n+bV5zQ0mMqG0u0PllTI7b/jtcarE2eVFXMFaeBQ/v6+ydegU+kQOvTAeqWx9IOfF1XI+VlbaoC4CwB46sNt48NFveDcZtahmJm8WMXrjnsL2jYWKpcL1G2M6JnPvU7lvn51W8nkuv/s7Tp2aapyX7+OPe+39dB3/kJhbplyodftD5T0uy8ZV2D9vu0MpZ5zWhEVtL5/uWLvdu3in6290bH3WpbLvt7XRrZqwIdP284olHycyg6WlT//OPk4nf0dc6mTXVZW/rzj1Pnef8hVc/u0c6bqAJRrbrIOgM3qABQPXAfAGClOjT70+QG1ulalglOaGsn4Aw48/eTqRqtrdfuDJZUL+193T51Rteh098+L+m+fXjZZle8AOcsoO8FivKyVdowHuvI5DV18elvd7v5PS3gvBZG08YGiOrGRNYySQQCA5uBcfuC1ZSTUXQ8V9OJ1TbmWkZ2haTrvJRtlm6vGW4FWhB2VBk7Qsef9tuKeZnX0v+csQNyTjj3vt/XEj65X3B5WKR/q+z8racdIoFUDido9s7udTas1g06jSarXrDxWlSDURBJPe9PfoSwF1JOerlp2jD625VENJz2V8vag7Vy1zKlbT1R58RkypZx8o6NZL+gQWLl6V8VLT1Lzn+9VOtFWKR/s1c44OfLja3tWAnzP54YOuRJgmkqFvNMxg4ne+LFVaratClMduj9w8poKG4OV9GlH6cZIf/2lod0XPh3g37c2u1Ao6Vi96MK6rnv5qJLYHHBixnmjMO9110MF7ZwItHowWeCV/8ASABbMilwYZC/vZn5z1chwoK/eXdVA1ajTmtCas1+tcn+fXJLM0blgI5ckKvf3ac3Zr1avM64oZzVSt/ri96vKFaXQ+l3t7K84tROnVVFB1648Tl2Xzurof8+BY885nVCo6DeWr9V4EqsQ6aDtjLupgsGyylecKd9LJWPn5ih3L1G4pl/FF54m1+gpyu3Rzhk4UprLeb3h46v0Z9cv186JQHFqdOsDJV39F2t154NFlSt+n69hrZT0jK69fEKb//E/dM36cUlGxwwkWjmQaEX/fl59iVb2J1peS3Qoa+7eS8tr2X+zom//f+cxg4kGK06DlVRf/++/1L/+901aVkn3uSVyn7/b7fE55LEEAgCbVjRXxwGLTjfcUdPO4WBmjwMaqd0zanYnd84bozBXPXpTZLlqVjNg8vueaNldlyHt2U4nqWgD5a2VOwq/bdUw3FWb54DtnGyoyYdSFGjWDuIfpKG2lJssyLR3O6dzG2ChmN0GePOGqtauiLNyBJIGq6lSZ/TeLw3umibf52sZqd6yKkZOn3zrVr1i3YSG64F6iZF7ms2BOow6/Qd6eS812ladntFn3vqkXrquqfqEOeiy2lRQ3jkc6IY7aqoWF+PxPzYCEgCg+Xw/QDc2M7rzOLvLXPo/363qydFIoWmrWF2j1We9SnF3bqb/91oG6Eqrz3qVitU1ins91UpOX7izpq07QhVrXp/7bk1PjoQq5qSJJNarVqzRilxBPefm7Ix7YIxaaaxXLl+jNfmiWok7YDvzecm1eiq+8FQFQ+XsnuG5aqi1cu2eii84VcHysuJOuqud0wmR3hsFOWnDwwX1ErPXCYA4MSoXve57vKCJCavoABcRBdar1zPyifTZtz+pG9++RUlilDjN6qVXgZWaXaty3umGt23RFRc1NT5qFQSHti3D++wzyO25IADgKGwGnJ3p4m68xzEoY2XD/NH7HsN8Vjp4MvR0JkOP2aOdU0u7OWNlj0J5Gy8pv8fXPlA7p/5lE4Wa9QL1B2ioiXZXbNyzndP9e0s5v9933jmpEGWb6/zB84m8l5pNo6suaeiGt29RHBuNNYNZCQFR6LVjItBLnt3Ujz70uF58bjbyP9yLkiydPwgAWNTB4mgecH7K196zbU9t59GcpPQHeQ8XyvupaZ0eOfD7f6grHcZIQSBNjFm95IKmbv6vm3Tp6S0N1wPlQj8j0S77Gl7bRkO9/MK6PvO2J1XNp2p27axdWgQcJADseV0ar5l5AZjr0GhmaJQcBl4TdavLTm/r5v+6SVc+p6EntkdT90lNq43OZ7cFvvKSCf3T25+Ud1KvZ2a8noYW7T4AXjP54hgg5v/D/Ggucj7laz91ZL3nnx7N2VjzNDMAC+H9nM433+qZ/UZva7NlBucO7+cTBl4TTatc5PSpP3hSz35mVx+8ZUBxapQ7guqFxki91Mil0o1v36L/dGFDnU62NGMZ+YMlAGjBVQWcnZ6s1TVZ0RQjee/kku7R+x6TrvzkWUcz2Tbn9m7nrpNu3skdhRkgI6m7x9c+UDvN1Dn2OJn7EwB7fm2/bzuPNAcY45X2pHUnd7Jp+j1G6VHo1WwbnfOMjmo1d9jn5MPAK02zEyB/eu2wPnvdFkWTpa8P8+LJrHSv8brpTzbrqksaarayvQ/TDUCOiQMQAKCjciGKn9HBpDVeSVd67mltDVUTpSqoU9+sLT++SVFe8i6du+/PpYry0pYf36R2fbOCKKdOz+iS09rqqzr12iZrZy1VN5FqQaSbtm/W9l5HOWvnLAak3qsURPrijs3a3G2rENgDtrPXy47htb/1kNLhprKygHOVpJxsMaf2tx9SuqOpIB/same14pQc4TG2wEqdttGLLmjq5evq2rQ9Uuqyb2ukHiiwXn/8ayMqRFlVxMP9fTUmK7rTbRjlo+nX2w+sV68zMxMxxmhG2gQCAHBYD7F62+qaSye0bChVN7YzEgSMkdJYuujkTvbAdtnQKenVj9r3mvTqkvcKjNTsWD37hI6qfU69trTu5LYKkVc6dd7eperOYv3/g80A1JNkV5naA7XT+clReDfJ6v/P9RZykx1DfOr7Wa75aVUClLJ19I+/Yav+x7U7tKyWKgq8Lj+zpa/8+SZdckZbzcaRr7N7L+UKXl/7QVnD9WDXLMDh3W/htX081J0/KSpXzi5omt4RXKtlQ6muuXRC9bZlDwEIAJi7DidJs9dMF5JLnVEQSRec1Far65Qr1rT5/s+rOTYuG4ZztMnSy4ahmmPj2nz/5xXl+xQnTgOVVOec0FXSmawJP9nOdteoEFhtjTu6ftsvlbeB3BwMy7yknLV6rNPQF3ZsUl8QqZPooO0M8oHSkaaa33hAJjfDpRwP2tBQyeYxtb/1U9lyTnG8Rzvb07tUyhjJpdkO/nf95rDueM8v9IP3Pa4v/ZdNWn9GW83WvmWAj6Q65dfvqWrgCGcrUmdUKTrd/4uC6uM2u6zIT7dWxR6fQx5LIABgLvZwxanRslqqi0/tKOlqxi4iMSarmlatOv3KWS3FiRSGeTVHH9MT9/6jotzcLAN4lyrKSU/c+49qjj6mIMorTqTVg7Gef0ZbSS+bFt7dTiMvr5INdOO2J9RIE0VzsAyQeK9qmNNXdz6pRzpNFQL7tO00zssWQrX+9UH5Vm9u6simTraaV/uOnyvZPCaTD/dp50xMhzsvTUxYVYteQ9VUvdQc8CKgw9XqGjW7B67Nb5TtGTjQhj7vs3oEd/1sZm7RnFouu/jUjpbVUsUpBYFAAIDm6ErgyOuik9tK45ndVB5Yr15T+k8XNLS8lihOnKJ8LeuMx8dkAzvLswBeNrBqjo9loSNflVWietvqZRc0VKo49RKrcM929iXqpUY5a7Uj7uq2sR2KjJ3VWQA/eRnQSC/7ekUbyFqveuvg7YxTI0WB3GhL3R/+UiYKZr8uQGDlRtvq3vtLmXyo0Lh93s8ZWUKa7ISTNKsCaCaXRKZdnbIifWVjRVuGI+X2U7EwsNnVw9vGQjXaB644aK1XNza662dFBdH03vbdy2XtXfsbAAIAZv8q4J7Rc05qK4g04zXIjcke3iuWpXr2CR1NtKyifE7NsV9o048+q3zFzuosgHep8hWrTT/6rJpjv5ANC3KTJWEvO6MtTd6e+9R21ltWoZWc93rrf9yniSRWbhbvBUi8U3+U18e2PKKbd25RXxCql0ph+PTtDGy2fXz0A/8m3+hm9wLMVgZIUtnBkhpf/KHatz0sU8krTfZ9P2f6d2im/s7AerVbRrc9UFJuPxvucqHXaCPbTPmXr92hF5/b1KadUVbwZ49R/tQ+gB3jof790bzCwvQ/O1PLZc85qa1OjyuBQQCAZn8JoN01Wn9mS9WqUzILU4/OG+VDrz96xYhqpVRp4pQr9uuRuz6oTfffqjAXzEoI8C5VmAu06f5b9chdH1SuMCBrEjU7Vr+2rq5fPa+pTnv3ZrKntjNxUiEINJbEuu6R+5W3gfwsjK4T79UX5nTr6DZ9aPMjWpUryBmn1iG2001eCOQbXY3+7bdkcuHszAKkTqZWVHfDY2rc9EMFyyoKnFOzu/92aj5efR16bR8OdNfPiirld4+0A5udgNm0M9TlZzV14x9v0R+9ZkSf+oMtes9rd0heGm2Gyu1R2ndqH8B9jxfUaphplRjec7ls/ZkttbssAeAIAm6lOvhu3gYccjGTxGrNYKK/eu0O5Y2blboy1kjtjtUpz4qVdDR5NbDU63a085Fv67jzf1dRISeXprvq9E//YZ8qzAeKu11tvP7lSnstBVFOcSJVi043v2uTwsk726e+3/21s7+SKvBW9zfHdVa5pnNrA5pIYwXGzMhGrcR7RcbKGKO3/Pw+/bzdUDkM1EmMaofRzoFyKmcDJf+xQ9GJy5U7/Ri5RldmpurRpk6KAhkZjb7/35T+clRBMVQcG1UL+2+n5uGtl6Wa1w3fqenmjTVViqm8ywoBjTRCFUKvd75yRB943XadvDbW2LBVGEgvuKil85/Z0ZPDoe59pKBK0Suw2amWMJCe2BnpmudPqFZ20/r+jZF8Ih23PNEtP6iq3gkoJwwCAGZHGHiNNgL94ZUjetnFTbVas1e/3Fqp1zY6/5Su7n8sr4eeyKlaidRrN9Tc+XMtP3G9olxRLklkjJlGHT4/OfIPFXcndP9X/1AT2x9UmCvLKlWjY/W/37xVZ57QVbe774ayfdq5Ka9ywSlQoJt3btHpparOqw2pnSZy3stOo7freaeBMLtO97d+ere+NbZdg2FO3jg1j6CdpaKXt4Hatz+s6BlDyp+zVr7ZzXbTTeOIoI9T2VpRRkbDf/5VdX/wuGytKOvd076fM3ndwHSChfeTNQZ6Vn/7lQE9vi23awbgyZFQv/rspt7//23Xa18yoV7bqNszmrrnqNWwOvXYnl5xUV2lgtfdDxc11gpVLTpZ6zVSD7VqINHznt1Rp22PuBJgtrxjtXxZqkbT6Js/qqhSdOwHAAEAs7D7P7Fa1Z/o739vm3LGazaryhplZ6WrFafjlsX6/HdrkrxyUaSJ7Q/piXtvUGX56Ro6/plKYyPvEpnDKdbuvbxPZW2gQs3qyZ/epo3X/7omtj2oICoqClJtGwv16xfX9c7fGFGnbfb7oN5vO42UC6TUS98Y3qZ2mmhdbVB9YU5Nl8ge5mxA6r2MMRrKFXTb6A699T/u29X5m8AdeTsnjwj6xKvz/UfkWz3lzlgtUy3It2KZgxXYP9Co30jhsoo69zyusff/267OPzKH9n5Od2NkmhrlwuzCndRnVQaPNMuE1qsXG/35jcsVhdJoI1B+z1H/mljjY9n1vXt+jSw4ZD/jp84G1MpO7Z7RBc/q6LJz2up1p/c+GCP5VDrl2J6+fFdVDWYBQADAbI3+r7tqRFdc1JrV0f+eo9Zux+qkY2M9+4SubvpeFgLyhbx63YZ2PPx/lcZe5eWnqFAryTsjnyaSd5NhYN8ewvtU8k42DBQVrTqNMT165z/ooX/7c6VxU2G+vKvzf8VFdX36uq2Ke+agYWd/7XSSCmFW6/1rI1t1X3Ncq3NFnVHpV+KdnLKNfOYAf3Hqs53lgTHqi3LqOaf3PfGw/uTRB/TzdmOvzn867ZSXopyRd1L7zkeU/Hy7guUV5U9ZmRULcl4+3aOdfj/37U4Ol02lIMWp6tdv0PiHb1P6y5G9Ov9DbeeRjtitlSoVr7G6VaNjVS04FYua3CCnw96Hkit4bXioqC/cWdO20UAvenZrn1F/GBzkPounzgYUvTb8rKhmx2q4Hug3Lq6rmHNHVKHwqcF82aBTo2n0r8wCgACAmR79J6nVqoFEf/+fZ3/0/9ROq922OuPEns4+vqsv3llTnHoV86Gcd9r+8Df15E++oqTTVXX5KSr2lRREVt4ZGfOUlzWKilZh3qpbH9Oj3/8HPfD1t2nrT2+RDfMKopysUm0fC/Xyi+q6/h3ZbW0uffoLW/bbTmeUj6Q+m9NPmxP62shWxd7phGJZtSBUf1RQKMlNHumzk6/AGPWFORWDQPU01fcnhvWOR3+sTz75uCpBqHIYyBs3Y+1MUqNcJJlKXsljO9X57n/Ix6nC1f0y5ZyCgdLug/aB3X27UGBla4VsQ2G7p96PN2v8Q7eqcfN9sqWcgmIo64+snYfd+QdSmkp/86Uhve3TK/Xhrw/ojgfLWr0s1kmrY3UPc6TtnFGx4vX+fx7UHT8p6a9+e4f+5v898Kj/oKWK95gNuOCEjjYPh/rRYwW9/sVjqhad3DT3QeyaBVjb05c3VtXsBlwwhEP73Vm5+lmcHcFBRYHXph2R3nPtdv3pa0Y0MW6ntYP5SMSJUV+/0zc2lPX6j63SeMuqXJCMCZTEHSXdukoDJ2jN2a9WmK9ozZm/IRvm9loPdklPmx/4gpJuQ5vv/7xao48pzFdlw4KsEnUTqduzuvLChj711qyzSpPD66z2185S3is0Rj3nVU9i9Uc5Pa9vSGeV+/TsSp8urg2p41IZSdYYdV2qm3Zs1kSS6Ms7N2tLr6Oey9b/nXHqJtnoc2bbGaiUdzKBkYu9XKsrWy0of85aRc9aoeikFcqftSYrIyyTXSTeS9X6zkNSs6fW7T+T29GQT1LZakHWOXXjrGTtdNp5qAGgUPT67Q8coxtu7dPygURmstRwYLy+9l836ZIz22o2D61krvfZ8b7tE6H+9Prleu2vjOsFF7bUHDW7MtAR/w5XnXo96V2fXa5nroz1hv80pkZj+qV8k9So1uf0lzcO6l3Xr9Da5fFhX34EAgCwzznoZifQFec19PE3b1VkDv82NM3cqTKV814j7UBv/YcV+srGqgqRVzHv5RUo7nWVdCckWRVqq/c5IeC9U2dii7yy4kJBVFBgEqWp1OxaDZRSffD3tunKdQ212+aI98IduJ1Oxlt1U6e2c2qmiQbDnAbCnNKpm/yU1RLY0uvIy6sahMpZqyiQeqnUmpN2ejkZpbGT7yby7Vi2ryhbLcg7t1fpvXRHXfKSLedkQqswNEoTP6Pv59N9D6WS1zfvKetV712jgWqqJM1u2stFXiMTgS4/q6nPv3OLfHzomwOn6icUck65nDRez8r3zkR7w0AqFr3GJqzyoZ+REgxTn8nYG73hw6v0jXsrKhfSGa/TgcUWAI4hABzVi9vndeefTV+W8073ffAxVYtOna45qtOL6eQxrCjndcuGit76v1bqydFQucirlPPK5bLGxb3efv/7MMrJWimOneJEqrez2YxXrKvrb/+/7VpWTtXqTn+N+uDtdMqH2fp+J/VKvN/1azF5X48KgVVgpG7q1UuMJiYrzM1lO4s5ny0NBEZJz8knu+/tNZK8jIJ8tos96WUX+szW+3nQke+A03/7zJD+6ovLtKI/UZKavW7yy4dOd//N4xqsHF7J3KlrfFOnGd3v4n3WrijwM3qdr3NSIZ9d1HXOW05Qs2tVyPldV1YvCPRGcyrkLTgKv+ALIARYm42AvJc+/vtbVS45tTtH/9axwGalXpO20dXrGnrOSR194a6q7nywqO8/VNLO8exsea0U7vM2GyNNNL2aHaOBirRqMNHvXdDQpWc09avntZQkRo0Z+h6frp076jZrZ9HJGrPXc88YaaxlJtvpjmo7hycm21kyMibY69fYGqnVmJt2Pt1nqpTz+/1YOZfV4Lf28PuWqeWjmd7saowUmJnt/Hft7+halUtOH//9rfqt969WnBiFoZdzdP5gBoCZgEN8kCSJUZJKN7xji664qKn62JHfqKbZu2JeUSjly15xS3pyNNQXv1/VRDvQF75Xza4ptj6borZSq5PdP3/WM7s67xkdPff0tvqrTkqlZnv2Rqm0c/YkqVGt3+mvbhzUf/vc8n1mAJLUqK+U6vv/8xfqK6WzUrlyvklTqdrv9Y2NZV3zvtUKA83/EEAvdHS6oRUEgKO6u17zcNo/3rPzv7Cp8bGZWf+crXKtqTMKAq9c4BUVs3++czjYa4RlJtdfBypO+aqXOtnyRi8xMsbP+pFG2kkA0NHYNHv37hAQhfNzOcDTA4klgCXoaG2mO9h0cKdn5f3C6PynHvJTJxJ6iVF7PHtDq0X3lGFF1jElqdH4cDYtbazm7DQD7Tx6nchS7GCi0Gt8zOqKC5u64R1bdM37Vit12abG+bQxkM5fXAa01EPAfOhEjZEaHatywemGty2Mzv9AndfUlbBJavZ4ZaOiqYejtUdvFYZ2zrxc6HcV33nq9xCFfkmM+g8aAt62ReVCVop5Jm9LpPNf2IJydeDdvA3zofMyR+0B34utWl2rqy5s6OY/26yzju2q0TpwlbOFEgb296Kdi6udUxfinLQ60f/5Xm1XPYPAZPsUtg6Huu7qEb14jqpXzsuTPB2j09b29NoXTujRrZHuf7wga7Jjkv4oxTZP7z9fAgCVAJdaENjV8SdW402rwYrTJ9+8Vf/lVSMKJXViSz1xLJigl6ZG/VWnU1b39O37y9oxHqjeDhQnRq96/oTefc2wfJLNUCzFmQBrpG5iVYq8Xvm8us48rqvvTL5PQZDNnsxVEKDjn3ebAE/kJ7IEgoAx2eUmics2ajU6Vscvj/U7vzKu171wTCv7UzU7c7NzG5iN6eRywWvraKAb7qhpvBno4lPaetEFTcU9ozTl93qq7y0XvLaNBfrUt/r16e/06Rc7IlUKTrnQ73pGzHQ/TcdPAMAsBwGzRzUZYyVrslyfpEZxajTesuorOS3vT3XtZeN63QvGtGp5qm47W8+lfjgWsuwYo1e+NHlMIZ6744gL8n0qSlt3BPrUt/t1/e192jEW7HpGRJN7P/zkxUje7T66fDh9OR0/AQBzFAbSyeRurVe7Z9XtZeVX+8tZkZYrL2ho/ZlNXXRqR/0Vp143u+88sJ4HJBbNKHdql/tcHkdcqO9TIeeUy0tjDauNDxV02wNl3XJPRVtHQo01rayR8jm/69ZCTT5fDlbSmU6fAIA5DgRGUqngFEwWaLn41LbWnd7R2LjVJae1te603UVaOl2jONV+d00DWFpBwHkpCrIywgqksbrVhp8WdedPi+rvc9rwk4Lueqg4eeeG1IuNuvHuegp0+AQAHNWreo1qpVTf/otNqpVS9WKjwWqqfGXy6HacdfpTRVqO9pEtAPOvEJ9zkvfZ3RCFvJeibGTRbUijjUDeG1X7nN5304D+8qYhLe/bXXQJohAQjm5l4VopVV/JKXXZ9N7EqNk1FWqPYpEWAPP/+ZEtl3ilXqq3jLzPnh9h4DVYTRUnVuWKUyHynOEnAGC+mSrQkqSGDh/AtMOA9igtnKRZzQXHY4UAgPldrAUQmwDZBMizBQQAAFoix9vKVc8xQIAAAGCpjPwrxclCQP9CISCAAABgSYz8i0Wvr99T1ps+sUrbxwKlLtvNfvW6uj7yxm3KWS/vCAGAuA0QwGIZ+Ueh1/bRUG/6xCqNNQMt60u1sj/RQDXVjbf26SO39KtY9vPqGlyAAAAA05A6o3xZuuG2qraNhqqVUsVJVvo6SY2WD6S6/rY+7RwOlI8cx9cAAgCAxaSXZGWvn9rBe58dYaPjBwgAALQ4j6kdyZ8BBAAAAEAAAAAtwLvuD/fPAAIAACxgudDv93ZLY7JTAiwDAAQAAItIYL26Tema9XWtHEg00QoUhV5R4BUGXjtGA127flzLhlJ1Y0sQAAgAALRINv/FidGKgUQfff1W9ZdT7RwPtG0s1Gg90GsuH9fvXzmmdtMosKwFAKISIIBFM4qxUqdj9LILmtp44uO64Q5KAQMEAABLZiag0TYaqKR6+ytHuQwIOLQAwLTY4sDPEcwEJKlRd5zrgGf/WeN55jADAADzayYgDOiYADYBAgAAAgAAANDkEgCzZVo0S3IAMJdbAHjusAcAAOZLSeDUsQkQIAAAWDKcy8r+lqueY4AAAQDAUhn5V4peW0cD3fAvFAICCAAAlsTIv1j0+vo9Zb3pE6u0fSxQ6oxyodfV6+r6yBu3KWe9vCMEAOIUAIDFMvKPQq/to6He9IlVGmsGWtaXamV/ooFqqhtv7dNHbulXsex37Q0AQABYfD9Mnm9YYlJnlC9LN9xW1bbRULVSqjgxilOjJDVaPpDq+tv6tHM4UD5y8uxa10wUWwIBAPOI81I3NtnmJ2CJ6SVGzmufDt777LZAOn7N2IxLLzaEgMUSAPx+jnXyWkAvL+Uip83DkT57W1W5opjqBKNSRqwz3vHnI6ftOwPdeEdV1ZJT6gzP3wX+YgZgkVwBlLisBroJqM0BYHYeNsXIK5kcYPCcYQkAmg/T/0alvNddDxVVn7CKAs+UJ5bc/hfD3phZnQEIctL3flrQeNMqsDxgCACYNx/OQuS14eGC0lgKDB9OLCFGavXMfkek1kqd2Mg5tsdompstw4L074/mNTwRKgoZZBAAMI/uQvfqxkZ3P1xQkMtmBYDFv/bvlfakdSd3lAu9jNm95h+FXs220TnP6KhWc4pTPhNHKgy8Wg2jf38sr3LRsc+IAID5NAMQBl7D9UC3/rioMC/SOZaEwEqdttGLLmjq5evq2rQ9Uuqy9emReqDAev3xr42oEHk5z+716dRaGBkPdMeDJRVzjP4JANB8m6IbqDh9eUNFm7aEnHnGktLrGX38DVv1P67doWW1VFHgdfmZLX3lzzfpkjPaajYM69bTeLZERen6W6saa1qFAc+WxcIsX/VMfpRaPNN020ZD/d1/3q43/9q46mNWYcCPF0tjlGqtVCx57RyxilOjZdVUUU6qNw23Ak5zdnGkGej5f3KsRhoB6//MAGDebgbMed3xYFFKxIgHS6oOgPPSxIRVteg1VE3VSw2d/0xUWixJn/63mn6xI1Ihx+ifAIB5+2GtFp2+cW9FX72rrELRyzneFyyZwwAKA68kzar/GYnOf9pr/05Pbg/0qW/3qVZi8x8BAPO+MFAu9PqDf1ih7aOBAmoCYAnOBrDZb/qS1KjYJ/3jd2r6xbaIfUWLUFCu9L+bt2FxyUVO28dDDZadLl/XUadpZYl6AA6j869Wnb7770Vd97+WqZh3VP5jBgBaIEsBfeVUf3dLv75+e0mFIlehAtChV/0LsguW/uqmAU20LTOJBAAsqA+wldo9o9d/ZIWabaN8zitlPwCAp+GcUbHo9LoPrNC3f1zUYDVVShElAgAW0odYKuWdJtpWr//wCjlJYSg2BQI4oDgxqvY7fX1DWTdvrGiomiqh8ycAQAtyKaBcdPrSXWVd+76VsoEUEAIAaN/Nw73YqG/A6RsbSnrt361UuegoKU4AwIIOAanRyoFUX95Y1m/9zUoZK+VyYjkAgKSsfoK81L/S6V/uKuk3/2aVAusVWEqKEwCgxTCtt7I/1Zc3VvTa969UvWNVLnglieEDDizpAUJWPMzL6D3/OKDXfXCFrGW5UEunFPAJdAFaOhenNLtGtaLTJ960XS+7rKXOqFGcUjAFWFrLg5I1UinvNdwK9PsfXa4v3F7ViqFEZmpWAEuhDsDAu3kbtGROB+Qjqdmx+pcflhR3jE47tqehqlMvMXI+eygAWLwdv7xULXnlctJXN5Z19X8/Rg/8Mqdl/amcM5z3ZwYAi5k1Uuql8abVqv5UH/y9HXr5c5uSkzpdo15iZIyXtVl5VQALN/RPbQi2xqtS8kq99K37SvrI1/p064+LigKvfMS+IAIAllTd9CDw6vSs4lRaf1Zbb71qXOed2NVgLZXSyTCQSprcCczlQsD8/2B7J6U+uwshH3kZI+VKXknP6Nv3FfWRr/XpO/cV5ZQtB3qx2Y8AgKVbN13SeMuqEDmtHkp15XOauvzMti46raP+ipOCbNqw15Y8x4KAefpZ9vIuK/qlvKRUGh61anat/nljRXc+WNA37inLS6qVnIwY9RMACACY3CDofHZiYLxlVSulWjWQ6v95XkNR4BWFXq+5tKFc5OWdWBsANP+Kf+XyXnf/tKC7Hi4osF433l5VOzbaMhwqCqVa0ckYOn4QAHCAGYHQeiWpUS81arSNnM/WD9cMpbLWi11CgOZlMR9rpbGG1Ug9UBh4VYtexnjlIy/vDR0/CAA49DCw57p/N852CDP4B+brpj+jMPCKAi8v7boEjDV+7E/IaA4H20GceKOpXj+kVgAw7+cBvLKlPBkxW4enCQDA080rTv4vzxJgAX52AVEKGAAAEAAAACAAAAAAAgAAACAAAAAAAgAAANBCPwbIWREAAJgBAAAABAAAAEAAAAAABAAAALAQhWwBBACAGQAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAAABAAAAJakUPK8CwAAMAMAAAAIAAAAQItvCYAVAAAAmAEAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAAAEAAAAQAAAAIAAAAAAloTQ8x4AAMAMAAAAWAIzABJzAAAAMAMAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAB0eLcBchkgAADMAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAADQ0SsERCUgAACYAQAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAIcn5C5AAACYAQAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABw9IQSpYAAAGAGAAAALIEZACYAAABgBgAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAABAAAAAAAQAAAAIAAAAgAAAAAAIAAABYJELJ8y4AAMAMAAAAIAAAAAACAAAAIAAAAAACAAAAIAAAAAACAAAAmB9CqgAAAMAMAAAAIAAAAAACAAAAIAAAAAAt0MuA2AUIAAAzAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAA0m6WAqQUMAAAzAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAgAAAAAAIAAAAEAAAAAABAAAAEAAAAAABAAAAEAAAAMCC8f8DiqXywET2IB0AAAAASUVORK5CYII="
 
 def write_icons(folder):
     names = {512: "icon-512.png", 192: "icon-192.png", 180: "apple-touch-icon.png", 32: "icon-32.png"}
     for n, fname in names.items():
         with open(os.path.join(folder, fname), "wb") as f:
             f.write(base64.b64decode(ICONS[n]))
-    manifest = {"name": "In Theaters - Coachella Valley", "short_name": "Showtimes", "start_url": ".",
-                "display": "standalone", "background_color": "#111318", "theme_color": "#111318",
-                "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-                          {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"}]}
+    with open(os.path.join(folder, "icon-maskable-512.png"), "wb") as f:
+        f.write(base64.b64decode(ICON_MASKABLE))
+    manifest = {"id": "./", "name": "In Theaters - Coachella Valley", "short_name": "Showtimes",
+                "description": "Today's showtimes at Festival, Cinemark and Regal, plus upcoming releases.",
+                "start_url": "./", "scope": "./", "display": "standalone",
+                "background_color": "#111318", "theme_color": "#111318",
+                "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+                          {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+                          {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png",
+                           "purpose": "maskable"}]}
     with open(os.path.join(folder, "manifest.webmanifest"), "w", encoding="utf-8") as f:
         json.dump(manifest, f)
 
@@ -789,19 +874,20 @@ def get_soon(now_ids, today):
             results += [m for m in d.get("results", []) if lo <= (m.get("release_date") or "") <= hi]
             if p >= d.get("total_pages", 1):
                 break
-    seen, soon = set(), []
+    seen, cands = set(), []
     for m in sorted(results, key=lambda m: -m.get("popularity", 0)):
         if m["id"] in seen or m["id"] in now_ids or not m.get("poster_path"):
             continue
         seen.add(m["id"])
-        date = us_theatrical_date(m["id"], lo, hi)
-        if not date:
-            continue  # no confirmed US theatrical date in the window
-        m["_date"] = date
-        soon.append(m)
-        if len(soon) >= MAX_UPCOMING:
-            break
-    return soon
+        cands.append(m)
+    cands = cands[:MAX_UPCOMING * 3]
+    dates = pmap(lambda m: us_theatrical_date(m["id"], lo, hi), cands)
+    soon = []
+    for m, date in zip(cands, dates):
+        if date:  # only films with a confirmed US theatrical date in the window
+            m["_date"] = date
+            soon.append(m)
+    return soon[:MAX_UPCOMING]
 
 
 def mock_showings(now):
@@ -830,7 +916,21 @@ def mock_showings(now):
     return [s for s in out if s["ts"].strftime("%Y-%m-%d") in (today, tomorrow)]
 
 
+def write_problems(problems):
+    """problems.txt is empty when everything is fine; the workflow fails the run otherwise."""
+    with open(PROBLEMS_FILE, "w", encoding="utf-8") as f:
+        f.write("".join(p + "\n" for p in problems))
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary and problems:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write("### Problems\n" + "".join(f"- {p}\n" for p in problems))
+    for p in problems:
+        print("PROBLEM:", p)
+
+
 def main():
+    started = time.time()
+    problems = []
     mock = "--mock" in sys.argv
     now = datetime.now(TZ)
     today = now.strftime("%Y-%m-%d")
@@ -847,24 +947,44 @@ def main():
         if not os.environ.get("TMDB_API_KEY"):
             sys.exit("TMDB_API_KEY is not set")
         use_tmdb = True
-        for key, fn in (("festival", fetch_festival), ("cinemark", fetch_cinemark), ("regal", fetch_regal)):
+        fetchers = {"festival": fetch_festival, "cinemark": fetch_cinemark,
+                    "regal": lambda d: fetch_regal(d, official=(d == today))}
+
+        def job(kd):
+            key, day = kd
             try:
-                got = fn(today)
-                print(f"{THEATER_NAMES[key]}: {len(got)} showtimes today")
-                showings += got
+                return key, day, fetchers[key](day), None
             except Exception as e:  # noqa: BLE001
-                print(f"{THEATER_NAMES[key]}: FAILED - {e}")
-                warnings.append((key, str(e)))
+                return key, day, None, e
+
+        jobs = [(k, d) for k, _ in THEATERS for d in (today, tomorrow)]
+        results = {(k, d): (got, err) for k, d, got, err in pmap(job, jobs, workers=6)}
+        for key, _ in THEATERS:
+            name = THEATER_NAMES[key]
+            got, err = results[(key, today)]
+            if err:
+                print(f"{name}: FAILED - {err}")
+                warnings.append((key, str(err)))
+                problems.append(f"{name}: today's showtimes could not be loaded ({str(err)[:300]})")
                 continue
-            try:  # tomorrow is a bonus: if it fails the page simply makes no claims about tomorrow
-                got = fn(tomorrow)
-                print(f"{THEATER_NAMES[key]}: {len(got)} showtimes tomorrow")
+            print(f"{name}: {len(got)} showtimes today")
+            if len(got) < MIN_SHOWTIMES:
+                problems.append(f"{name}: only {len(got)} showtimes found for today - the site may have changed")
+            showings += got
+            got, err = results[(key, tomorrow)]  # tomorrow is a bonus: no data -> no claims about tomorrow
+            if err:
+                print(f"{name}: tomorrow not available - {err}")
+                problems.append(f"{name}: tomorrow's showtimes could not be loaded ({str(err)[:300]})")
+            else:
+                print(f"{name}: {len(got)} showtimes tomorrow")
+                if len(got) < MIN_SHOWTIMES:
+                    problems.append(f"{name}: only {len(got)} showtimes found for tomorrow")
                 showings += got
                 if got:
                     tmrw_ok.append(key)
-            except Exception as e:  # noqa: BLE001
-                print(f"{THEATER_NAMES[key]}: tomorrow not available - {e}")
         if len(warnings) == len(THEATERS):
+            problems.append("All three theaters failed - the page was NOT updated (the previous version stays online)")
+            write_problems(problems)
             sys.exit("All theaters failed; keeping the previously published page.")
 
     movies = build_movies(showings, use_tmdb)
@@ -874,16 +994,18 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"TMDB upcoming failed: {e}")
             soon = []
+        if TMDB_STATS["fail"] and TMDB_STATS["fail"] >= TMDB_STATS["ok"]:
+            problems.append(f"TMDB: {TMDB_STATS['fail']} of {TMDB_STATS['fail'] + TMDB_STATS['ok']} requests failed "
+                            "(posters/ratings missing) - check the TMDB_API_KEY secret")
+        if not soon:
+            problems.append("TMDB: the 'Coming soon' list is empty")
 
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary and warnings:
-        with open(summary, "a", encoding="utf-8") as f:
-            f.write("### Theaters that failed\n" + "".join(f"- **{THEATER_NAMES[k]}**: `{r[:400]}`\n" for k, r in warnings))
+    write_problems(problems)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     write_icons(os.path.dirname(OUT))
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(movies, soon, today, warnings, tomorrow, tmrw_ok))
-    print(f"OK: {len(movies)} movies, {len(soon)} upcoming -> {OUT}")
+    print(f"OK: {len(movies)} movies, {len(soon)} upcoming -> {OUT} ({time.time() - started:.1f}s)")
 
 
 if __name__ == "__main__":
