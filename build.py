@@ -471,8 +471,11 @@ def apply_dplace(results, dp, dp_err, days, problems):
         for s in got:
             s["buy"] = dplace_ticket(s["title"], s["ts"], dp["tickets"])
         if len(theirs) >= MIN_SHOWTIMES:            # both sources answered: they should agree
-            a = Counter(s["ts"].strftime("%H:%M") for s in got)
-            b = Counter(ts.strftime("%H:%M") for _, ts in theirs)
+            # D'Place drops showings that have already started, BigScreen keeps the whole day:
+            # compare only what is still ahead (with a little margin)
+            ahead = datetime.now(TZ) + timedelta(minutes=10)
+            a = Counter(s["ts"].strftime("%H:%M") for s in got if s["ts"] >= ahead)
+            b = Counter(ts.strftime("%H:%M") for _, ts in theirs if ts >= ahead)
             diff = sum(((a - b) + (b - a)).values())
             if diff > max(4, 0.2 * max(sum(a.values()), sum(b.values()))):
                 problems.append(f"Mary Pickford Theatre: BigScreen ({sum(a.values())}) and the D'Place site "
@@ -517,7 +520,7 @@ def clean_title(t):
 
 
 def norm(t):
-    return re.sub(r"[^a-z0-9]+", "", clean_title(t).lower())
+    return re.sub(r"[^a-z0-9]+", "", clean_title(t).lower().replace("&", "and"))
 
 
 # These theaters' pages cannot open one movie for our theater (their movie pages ask where you are), so the
@@ -571,6 +574,8 @@ def tmdb_by_title(title, year=None):
             alt = re.sub(r":?\s+part (one|1)$", "", queries[0], flags=re.I)
             if alt != queries[0]:
                 queries.append(alt)
+            if "&" in queries[0]:                  # "Planes, Trains & Automobiles" is "... and ..." on TMDB
+                queries.append(queries[0].replace("&", "and"))
             for q in queries:
                 res = tmdb("/search/movie", query=q, include_adult="false")["results"]
                 exact = [r for r in res if norm(q) in (norm(r.get("title", "")), norm(r.get("original_title", "")))]
