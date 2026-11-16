@@ -747,7 +747,7 @@ def now_card(g, i, d0, others=None):
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
     gen = f' data-genre="{html.escape(" / ".join(g["genres"]))}"' if g.get("genres") else ""
     lab = f'<span class="plab">{g["label"]}</span>' if g.get("label") else ""
-    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}{lab}<div class="body"><h3>{html.escape(g["title"])}</h3>'
+    return (f'<article class="card now" tabindex="0"{rt}{gen}>{poster_html(g, i)}{lab}<div class="pbox" aria-hidden="true"><span class="plab2">Today only*</span></div><div class="body"><h3>{html.escape(g["title"])}</h3>'
             f'<div class="meta">{rating}</div><div class="status" hidden></div>{rows}</div></article>')
 
 
@@ -894,6 +894,52 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .empty{color:var(--mut)}
 footer{color:var(--mut);font-size:.8rem;padding-bottom:32px}
 footer h2{color:var(--fg)}
+
+/* ---- view switcher: Showtimes / Posters / List (icons, caption of the active one below) ---- */
+.mode{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:3px;background:var(--chip);border-radius:999px;margin:10px 0 0}
+.mode button{font:inherit;border:0;background:transparent;color:var(--mut);padding:0;width:58px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:999px;cursor:pointer;
+  transition:background .25s,color .25s,box-shadow .25s}
+.mode button[aria-pressed="true"]{background:var(--card);color:var(--fg);box-shadow:0 0 0 1px var(--cline) inset}
+.mode svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.modecap{font-size:.72rem;color:var(--mut);margin-top:5px;letter-spacing:.02em}
+/* first-visit hint: the inactive icons light up one by one in neutral gray and "breathe" once */
+.mode button.tour{background:hsl(220 6% 55%);color:#14161c;box-shadow:none}
+@media (prefers-color-scheme:light){.mode button.tour{color:#fff}}
+@media (prefers-reduced-motion:no-preference){
+  .mode button.tour svg{animation:breathe .6s ease-in-out both}
+  @keyframes breathe{0%,100%{transform:scale(1)}45%{transform:scale(1.25)}}}
+/* poster view: no times under the posters (tap a poster for the schedule) */
+body.pm .card.now .th,body.pm .card.now .status{display:none}
+.pbox{position:absolute;left:0;right:0;top:0;aspect-ratio:2/3;pointer-events:none}
+.plab2{display:none;position:absolute;right:8px;bottom:8px;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
+  border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+body.pm .card.tonly .plab2{display:block}
+/* list view: one card with every movie instead of the posters */
+body.lm #nowgrid{display:none}
+.gcard,.glist{display:none;background:var(--card);border:1px solid var(--cline);border-radius:12px;
+  box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent);padding:10px 12px 8px;margin:0 0 12px}
+body.pm .gcard,body.lm .glist{display:block}
+.gcard.inmas{margin:0}
+.gleg{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 6px}
+.gk{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:500;padding:2px 8px;border-radius:7px;background:var(--tb);white-space:nowrap;line-height:1.5}
+.gk b{color:var(--tc);font-weight:700}
+.gk.tm{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent);padding:1px 7px}
+.gk.px{opacity:.5;text-decoration:line-through}
+.gsub{font-size:.74rem;color:var(--mut);margin:0 0 2px}
+.gw{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer}
+.gw:hover .gn{text-decoration:underline;text-underline-offset:3px}
+.gw.xtra{display:none} .gcard.all:not(.narrow) .gw.xtra{display:flex}
+.gi{width:26px;height:38px;border-radius:4px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
+.gm{min-width:0;flex:1}
+.gn{font-size:.86rem;font-weight:600;line-height:1.25;margin:0 0 3px}
+.gcs{display:flex;flex-wrap:wrap;gap:3px}
+.gr{font-size:.74rem;flex:none;align-self:flex-start;margin-top:2px}
+.gmore{display:flex;align-items:center;gap:6px;padding:8px 0 2px;border-top:1px solid var(--cline);font-size:.76rem;color:var(--mut)}
+.gmore i{margin-left:auto;font-style:normal}
+.gmore.btn{cursor:pointer;color:var(--fg);font-weight:600;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit;text-align:left}
+.gcard.narrow .gmore.btn,.gcard:not(.narrow) .gmore.hint{display:none}
+.lcols{display:grid;grid-template-columns:1fr;gap:0 28px}
+@media (min-width:732px){.lcols{grid-template-columns:1fr 1fr}}
 [hidden]{display:none!important}
 """
 
@@ -925,7 +971,7 @@ JS = """
     if(rolled && !hadToday){ c.hidden=true; return; }
     if(upcoming){
       c.style.order=0;
-      if(allOk && !tomorrow) msg='Not scheduled tomorrow*';
+      if(allOk && !tomorrow){ msg='Not scheduled tomorrow*'; c.classList.add('tonly'); }
     } else if(tomorrow){
       c.style.order=1; c.classList.add('later');
       msg=hadToday ? 'No more showings today' : 'Not showing today';
@@ -941,25 +987,29 @@ JS = """
 
   /* masonry: keep the order (showing today -> only tomorrow -> done, each by rating), drop each card
      into the currently shortest column; 2 columns on phones, 3 on tablets, 4 on desktops */
-  var grid=document.getElementById('nowgrid');
+  var grid=document.getElementById('nowgrid'), VIEW={mode:'cards',box:null,layout:null};
   if(grid){
     var list=Array.prototype.slice.call(grid.querySelectorAll(':scope > .card.now'));
     list.forEach(function(c,i){ c._i=i; });
     list.sort(function(a,b){ return ((+a.style.order||0)-(+b.style.order||0)) || (a._i-b._i); });
     var ncol=0;
-    var layout=function(){
-      var w=grid.clientWidth, n=w<700?2:(w<980?3:4);
-      if(n===ncol) return; ncol=n;
+    var layout=function(force){
+      var w=grid.clientWidth; if(!w) return;           /* hidden (list view): lay out when shown again */
+      var n=w<700?2:(w<980?3:4);
+      if(n===ncol && !force) return; ncol=n;
+      var gb=VIEW.box; if(gb && gb.parentNode) gb.parentNode.removeChild(gb);
       grid.classList.add('masonry'); grid.textContent='';
       var cols=[];
       for(var i=0;i<n;i++){ var col=document.createElement('div'); col.className='mcol'; grid.appendChild(col); cols.push(col); }
+      if(gb){ gb.classList.toggle('narrow',n===2); gb.classList.toggle('inmas',n>2);
+        if(VIEW.mode==='posters'){ if(n>2) cols[0].appendChild(gb); else grid.parentNode.insertBefore(gb,grid); } }
       list.forEach(function(c){
         if(c.hidden) return;
         var k=0; for(var j=1;j<n;j++) if(cols[j].offsetHeight<cols[k].offsetHeight) k=j;
         cols[k].appendChild(c);
       });
     };
-    layout();
+    layout(); VIEW.layout=layout; VIEW.list=list;
     var rt; window.addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(layout,120); });
   }
 
@@ -1035,6 +1085,84 @@ JS = """
     if(e.key==='Escape' && !sheet.hidden){ close(); return; }
     if((e.key==='Enter'||e.key===' ') && e.target.classList && e.target.classList.contains('now')){ e.preventDefault(); open(e.target); }
   });
+  /* ---- views: Showtimes (cards) / Posters (posters + short list card) / List (one card, every movie) ---- */
+  (function(){
+    var mode=document.getElementById('mode'), cap=document.getElementById('modecap');
+    if(!mode || !grid || !VIEW.layout) return;
+    var btns=[].slice.call(mode.querySelectorAll('button')), CAPS={cards:'Showtimes',posters:'Posters',list:'List'};
+    var cards=VIEW.list.filter(function(c){ return !c.hidden; }), N=7;
+    if(!cards.length){ mode.hidden=true; cap.hidden=true; return; }
+    var L={festival:'F',cinemark:'C',regal:'R',pickford:'M'};
+    var sf=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
+    function st(ts){ return sf.format(new Date(ts*1000)).replace(' AM','a').replace(' PM','p').replace(':00',''); }
+    function legend(){ var g=el('div','gleg');
+      THEATERS.forEach(function(x){ var s=el('span','gk'); s.dataset.th=x[0]; s.appendChild(el('b',null,L[x[0]])); s.appendChild(document.createTextNode(x[1])); g.appendChild(s); });
+      return g; }
+    var THEATERS=[['festival','Festival'],['cinemark','Cinemark'],['regal','Regal'],['pickford','Pickford']];
+    function row(c,xtra){
+      var w=el('div','gw'+(xtra?' xtra':'')), ttl=c.querySelector('h3').textContent;
+      w.appendChild(el('div','gi',ttl.charAt(0)));
+      var m=el('div','gm'); m.appendChild(el('div','gn',ttl));
+      var cs=el('div','gcs');
+      c.querySelectorAll('.th').forEach(function(r){
+        if(r.hidden) return;
+        var a=r._today?[].slice.call(r._today.querySelectorAll('.t')):[], b=r._tmrw?[].slice.call(r._tmrw.querySelectorAll('.t')):[];
+        var nx=a.filter(function(t){ return !t.classList.contains('past') && +t.dataset.ts>=now; })[0], cls='gk', t=nx, pre='';
+        if(!t && b.length){ t=b[0]; cls+=' tm'; pre='tomorrow '; }
+        else if(!t && a.length){ t=a[a.length-1]; cls+=' px'; }
+        if(!t) return;
+        var s=el('span',cls); s.dataset.th=r.dataset.th; s.appendChild(el('b',null,L[r.dataset.th]||'?'));
+        s.appendChild(document.createTextNode(pre+st(+t.dataset.ts))); cs.appendChild(s);
+      });
+      m.appendChild(cs); w.appendChild(m);
+      var rt=c.querySelector('.rating');
+      w.appendChild(el('div','gr rating'+(rt && rt.classList.contains('few')?' few':''), rt && !rt.classList.contains('none') ? rt.textContent : ''));
+      w.addEventListener('click',function(){ open(c); });
+      return w;
+    }
+    var SUB='Next showing at each theater';
+    /* poster view card: 7 movies; on wider screens a button shows the rest */
+    var box=el('div','gcard'); box.appendChild(legend()); box.appendChild(el('div','gsub',SUB));
+    cards.forEach(function(c,k){ box.appendChild(row(c,k>=N)); });
+    if(cards.length>N){
+      var bt=el('button','gmore btn'); bt.type='button';
+      var setBt=function(on){ bt.innerHTML=''; bt.appendChild(el('span',null,on?'Show less':'Show all '+cards.length)); bt.appendChild(el('i',null,on?'↑':'↓')); };
+      setBt(false);
+      bt.addEventListener('click',function(){ setBt(box.classList.toggle('all')); VIEW.layout(true); });
+      var hint=el('div','gmore hint'); hint.appendChild(el('span',null,'+ '+(cards.length-N)+' more · tap a poster below')); hint.appendChild(el('i',null,'↓'));
+      box.appendChild(bt); box.appendChild(hint);
+    }
+    VIEW.box=box;
+    /* list view: one card, every movie (two columns inside it on wide screens) */
+    var lv=el('div','glist'); lv.appendChild(legend()); lv.appendChild(el('div','gsub',SUB));
+    var lc=el('div','lcols'), half=Math.ceil(cards.length/2);
+    [cards.slice(0,half),cards.slice(half)].forEach(function(part){ var col=el('div'); part.forEach(function(c){ col.appendChild(row(c,false)); }); lc.appendChild(col); });
+    lv.appendChild(lc); grid.parentNode.insertBefore(lv,grid);
+
+    var timers=[];
+    function stopTour(){ timers.forEach(clearTimeout); timers=[]; btns.forEach(function(b){ b.classList.remove('tour'); }); }
+    function apply(m,save){
+      VIEW.mode=m; B.classList.toggle('pm',m==='posters'); B.classList.toggle('lm',m==='list');
+      btns.forEach(function(b){ b.setAttribute('aria-pressed',String(b.dataset.m===m)); });
+      cap.textContent=CAPS[m];
+      if(save){ try{ localStorage.setItem('view',m); }catch(e){} }
+      if(m!=='list') VIEW.layout(true);
+    }
+    btns.forEach(function(b){ b.addEventListener('click',function(){ stopTour(); apply(b.dataset.m,true); }); });
+    var saved=null; try{ saved=localStorage.getItem('view'); }catch(e){}
+    var h=location.hash.slice(1);
+    apply(CAPS[h]?h:(CAPS[saved]?saved:'cards'),false);
+
+    /* first visit only: light up the inactive icons one by one (no caption change) */
+    var seen=true; try{ seen=!!localStorage.getItem('viewHint'); localStorage.setItem('viewHint','1'); }catch(e){}
+    var calm=window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!seen && !calm){
+      var seq=btns.filter(function(b){ return b.getAttribute('aria-pressed')!=='true'; });
+      seq.forEach(function(b,i){ timers.push(setTimeout(function(){
+        btns.forEach(function(x){ x.classList.toggle('tour',x===b); }); },1500+i*600)); });
+      timers.push(setTimeout(stopTour,1500+seq.length*600));
+    }
+  })();
 })();
 """
 
@@ -1071,7 +1199,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <link rel="preconnect" href="https://image.tmdb.org">
 <style>{CSS}</style></head>
 <body data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
-<header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div></header>
+<header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>

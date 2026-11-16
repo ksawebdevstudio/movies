@@ -16,5 +16,8 @@ are hidden (`HIDE_NON_IMAX_3D` in build.py).
 - Runs 3 times a day (5am / 11am / 5pm Pacific in winter). Past showtimes are hidden in the browser by the viewer's clock.
 - If a theater fails, the page still builds and shows a notice; if all three fail, the old page stays online.
 - Scheduled runs pause after 60 days without repo activity; re-enable in the Actions tab or push any commit.
+- Three views, switched by the icons under the title: Showtimes (cards with times), Posters (posters only plus a short
+  list card; tap a poster for the schedule) and List (one card with every movie). The choice is remembered in the browser;
+  on the first visit the inactive icons light up once as a hint. `#posters` / `#list` in the URL open a view directly.
 - Local test without network: `python build.py --mock` (writes `site/index.html`).
 - If GitHub's servers get blocked by a theater site, run `build.py` on the NAS instead (see chat notes).
