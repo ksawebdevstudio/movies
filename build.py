@@ -859,10 +859,20 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
   background:linear-gradient(to bottom,transparent,var(--card));opacity:0;transition:opacity .2s}
 .sheet-box.more::after{opacity:1}
 .sheet-x{position:absolute;z-index:2;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
-  display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer;box-shadow:0 0 10px 6px var(--card)}
+  display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer;box-shadow:0 0 0 2px var(--card),0 0 6px 4px var(--card)}
 .sheet-x svg{width:14px;height:14px;display:block}
 .shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
 .shead > img,.shead > .poster{width:92px;flex:none;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
+.shead > img{cursor:zoom-in}
+/* tap the small poster in the popup: show it large */
+.zoom{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.82);
+  cursor:zoom-out;opacity:0;transition:opacity .2s}
+.zoom.on{opacity:1}
+.zoom img{max-width:min(92vw,520px);max-height:86vh;width:auto;height:auto;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.6);
+  transform:scale(.92);transition:transform .2s}
+.zoom.on img{transform:scale(1)}
+.zoom .zx{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;
+  font-size:1.2rem;line-height:1;cursor:pointer}
 .stitle h3{font-size:1.15rem;margin:2px 0 4px}
 .sstatus{font-size:.8rem;color:var(--acc);font-weight:600;margin-top:4px}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
@@ -945,7 +955,7 @@ body.pm .gcard,body.lm .glist{display:block}
 .gsub{font-size:.74rem;color:var(--mut);margin:0 0 2px}
 .gw{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer}
 .gw:hover .gn{text-decoration:underline;text-underline-offset:3px}
-.gw.xtra{display:none} .gcard.all:not(.narrow) .gw.xtra{display:flex}
+.gw.xtra{display:none} .gcard.all:not(.narrow) .gw.xtra{display:flex} .gcard.narrow .gw.mx{display:none}
 .gi{width:26px;height:38px;border-radius:4px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
 .gm{min-width:0;flex:1}
 .gn{font-size:.86rem;font-weight:600;line-height:1.25;margin:0 0 3px}
@@ -1054,10 +1064,29 @@ JS = """
   }
   var tf=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
   function dur(m){ m=+m; return Math.floor(m/60)+'h '+(m%60<10?'0':'')+(m%60)+'m'; }
+  /* large poster over the popup (w780 from TMDB; the small w342 one shows until it loads) */
+  var zoom=null;
+  function zoomOut(){ if(!zoom) return; var z=zoom; zoom=null; z.classList.remove('on'); setTimeout(function(){ z.remove(); },200); }
+  function zoomIn(src){
+    zoomOut(); var z=el('div','zoom'); z.setAttribute('role','dialog'); z.setAttribute('aria-label','Poster');
+    var im=el('img'); im.alt=''; im.src=src;
+    var big=src.replace('/w342/','/w780/');
+    if(big!==src){ var pre=new Image(); pre.onload=function(){ im.src=big; }; pre.src=big; }
+    var x=el('button','zx','\u2715'); x.type='button'; x.setAttribute('aria-label','Close');
+    z.appendChild(im); z.appendChild(x); z.addEventListener('click',zoomOut);
+    document.body.appendChild(z); zoom=z; requestAnimationFrame(function(){ z.classList.add('on'); }); x.focus();
+  }
   function open(card){
     sb.innerHTML='';
     var head=el('div','shead'), pv=card.querySelector(':scope > img, :scope > .poster');
-    if(pv) head.appendChild(pv.cloneNode(true));
+    if(pv){
+      var pc=pv.cloneNode(true); head.appendChild(pc);
+      if(pc.tagName==='IMG'){
+        pc.setAttribute('role','button'); pc.tabIndex=0; pc.setAttribute('aria-label','Show poster larger');
+        pc.addEventListener('click',function(e){ e.stopPropagation(); zoomIn(pc.src); });
+        pc.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); zoomIn(pc.src); } });
+      }
+    }
     var ht=el('div','stitle'); ht.appendChild(el('h3',null,card.querySelector('h3').textContent));
     ht.appendChild(card.querySelector('.meta').cloneNode(true));
     var info=[card.dataset.genre, card.dataset.rt ? dur(card.dataset.rt) : ''].filter(Boolean).join(' \u00b7 ');
@@ -1094,7 +1123,7 @@ JS = """
     sb.scrollTop=0; more();
     [].forEach.call(sb.querySelectorAll('img'), function(im){ if(!im.complete) im.addEventListener('load', more); });
   }
-  function close(){ sheet.hidden=true; document.documentElement.style.overflow=''; }
+  function close(){ zoomOut(); sheet.hidden=true; document.documentElement.style.overflow=''; }
   document.addEventListener('click',function(e){
     if(e.target.closest('.sheet-bg, .sheet-x')){ close(); return; }
     var bt=e.target.closest('.t[data-buy], .c[data-buy]');   /* a showtime with its own ticket link */
@@ -1104,6 +1133,7 @@ JS = """
     if(c) open(c);
   });
   document.addEventListener('keydown',function(e){
+    if(e.key==='Escape' && zoom){ zoomOut(); return; }
     if(e.key==='Escape' && !sheet.hidden){ close(); return; }
     if((e.key==='Enter'||e.key===' ') && e.target.classList && e.target.classList.contains('now')){ e.preventDefault(); open(e.target); }
   });
@@ -1112,7 +1142,7 @@ JS = """
     var mode=document.getElementById('mode'), cap=document.getElementById('modecap');
     if(!mode || !grid || !VIEW.layout) return;
     var btns=[].slice.call(mode.querySelectorAll('button')), CAPS={cards:'Showtimes',posters:'Posters',list:'List'};
-    var cards=VIEW.list.filter(function(c){ return !c.hidden; }), N=7;
+    var cards=VIEW.list.filter(function(c){ return !c.hidden; }), N=7, NP=5;   /* rows in the poster-view card: wide screens / phones */
     if(!cards.length){ mode.hidden=true; cap.hidden=true; return; }
     var L={festival:'F',cinemark:'C',regal:'R',pickford:'M'};
     var sf=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
@@ -1145,14 +1175,17 @@ JS = """
     var SUB='Next showing at each theater';
     /* poster view card: 7 movies; on wider screens a button shows the rest */
     var box=el('div','gcard'); box.appendChild(legend()); box.appendChild(el('div','gsub',SUB));
-    cards.forEach(function(c,k){ box.appendChild(row(c,k>=N)); });
+    cards.forEach(function(c,k){ var w=row(c,k>=N); if(k>=NP) w.classList.add('mx'); box.appendChild(w); });
     if(cards.length>N){
       var bt=el('button','gmore btn'); bt.type='button';
       var setBt=function(on){ bt.innerHTML=''; bt.appendChild(el('span',null,on?'Show less':'Show all '+cards.length)); bt.appendChild(el('i',null,on?'↑':'↓')); };
       setBt(false);
       bt.addEventListener('click',function(){ setBt(box.classList.toggle('all')); VIEW.layout(true); });
-      var hint=el('div','gmore hint'); hint.appendChild(el('span',null,'+ '+(cards.length-N)+' more · tap a poster below')); hint.appendChild(el('i',null,'↓'));
-      box.appendChild(bt); box.appendChild(hint);
+      box.appendChild(bt);
+    }
+    if(cards.length>NP){
+      var hint=el('div','gmore hint'); hint.appendChild(el('span',null,'+ '+(cards.length-NP)+' more · tap a poster below')); hint.appendChild(el('i',null,'↓'));
+      box.appendChild(hint);
     }
     VIEW.box=box;
     /* list view: one card, every movie (two columns inside it on wide screens) */
