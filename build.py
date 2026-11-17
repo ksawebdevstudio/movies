@@ -871,8 +871,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .zoom img{max-width:min(92vw,520px);max-height:86vh;width:auto;height:auto;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.6);
   transform:scale(.92);transition:transform .2s}
 .zoom.on img{transform:scale(1)}
-.zoom .zx{position:absolute;top:14px;right:14px;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;
-  font-size:1.2rem;line-height:1;cursor:pointer}
+.zoom .zx{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:0;padding:0;display:flex;align-items:center;justify-content:center;
+  background:var(--chip);color:var(--fg);cursor:pointer}
+.zoom .zx svg{width:14px;height:14px;display:block}
 .stitle h3{font-size:1.15rem;margin:2px 0 4px}
 .sstatus{font-size:.8rem;color:var(--acc);font-weight:600;margin-top:4px}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
@@ -1071,8 +1072,11 @@ JS = """
     zoomOut(); var z=el('div','zoom'); z.setAttribute('role','dialog'); z.setAttribute('aria-label','Poster');
     var im=el('img'); im.alt=''; im.src=src;
     var big=src.replace('/w342/','/w780/');
-    if(big!==src){ var pre=new Image(); pre.onload=function(){ im.src=big; }; pre.src=big; }
-    var x=el('button','zx','\u2715'); x.type='button'; x.setAttribute('aria-label','Close');
+    if(big!==src){ var pre=new Image(); pre.src=big;
+      if(pre.complete && pre.naturalWidth) im.src=big;            /* already preloaded: show the sharp one at once */
+      else pre.onload=function(){ im.src=big; }; }
+    var x=el('button','zx'); x.type='button'; x.setAttribute('aria-label','Close');
+    x.innerHTML='<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
     z.appendChild(im); z.appendChild(x); z.addEventListener('click',zoomOut);
     document.body.appendChild(z); zoom=z; requestAnimationFrame(function(){ z.classList.add('on'); }); x.focus();
   }
@@ -1082,6 +1086,7 @@ JS = """
     if(pv){
       var pc=pv.cloneNode(true); head.appendChild(pc);
       if(pc.tagName==='IMG'){
+        var bigSrc=pc.src.replace('/w342/','/w780/'); if(bigSrc!==pc.src){ (new Image()).src=bigSrc; }   /* warm the cache for the zoom */
         pc.setAttribute('role','button'); pc.tabIndex=0; pc.setAttribute('aria-label','Show poster larger');
         pc.addEventListener('click',function(e){ e.stopPropagation(); zoomIn(pc.src); });
         pc.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); zoomIn(pc.src); } });
