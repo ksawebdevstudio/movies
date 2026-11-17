@@ -850,9 +850,15 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .card.now:hover{border-color:var(--mut)}
 #sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}
-.sheet-box{position:relative;width:100%;max-width:520px;max-height:86vh;overflow:auto;background:var(--card);
-  border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
-.sheet-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
+.sheet-box{position:relative;width:100%;max-width:520px;max-height:86vh;overflow:hidden;display:flex;flex-direction:column;background:var(--card);
+  border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+/* only the inside scrolls (the close button stays put); no scrollbar, a soft fade while there is more below */
+.sheet-body{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px;scrollbar-width:none}
+.sheet-body::-webkit-scrollbar{display:none}
+.sheet-box::after{content:"";position:absolute;left:0;right:0;bottom:0;height:56px;pointer-events:none;
+  background:linear-gradient(to bottom,transparent,var(--card));opacity:0;transition:opacity .2s}
+.sheet-box.more::after{opacity:1}
+.sheet-x{position:absolute;z-index:2;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
   display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer}
 .sheet-x svg{width:14px;height:14px;display:block}
 .shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
@@ -889,7 +895,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sth .sgrp.tm .c.imax{border:1px solid var(--acc)} .sth .sgrp.tm .c.fmt{border:1px solid var(--tc,#888)}
 @media (max-width:700px){
   #sheet{align-items:flex-end;padding:0}
-  .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0;padding:16px 14px 24px}
+  .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0}
+  .sheet-body{padding:16px 14px 24px}
   .shead > img,.shead > .poster{width:76px}}
 /* "Now playing" cards keep their look; only the columns differ in height (masonry, laid out by the
    script; without it a normal grid is shown) */
@@ -907,6 +914,11 @@ footer h2{color:var(--fg)}
 .mode button[aria-pressed="true"]{background:var(--card);color:var(--fg);box-shadow:0 0 0 1px var(--cline) inset}
 .mode svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .modecap{font-size:.72rem;color:var(--mut);margin-top:5px;letter-spacing:.02em}
+.modecap.peek{color:var(--fg)}
+@media (hover:hover){
+  .mode button:not([aria-pressed="true"]):not(.tour):hover{background:color-mix(in srgb,var(--fg) 10%,transparent);color:var(--fg)}
+  .mode button:active{transform:scale(.94)}}
+.mode button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 /* first-visit hint: the inactive icons light up one by one in neutral gray and "breathe" once */
 .mode button.tour{background:hsl(220 6% 55%);color:#14161c;box-shadow:none}
 @media (prefers-color-scheme:light){.mode button.tour{color:#fff}}
@@ -1025,7 +1037,10 @@ JS = """
   window.addEventListener('pageshow', function(e){ if(e.persisted) maybeReload(); });
 
   /* ---- popup with the full schedule, opened from the poster ---- */
-  var sheet=document.getElementById('sheet'), sb=sheet.querySelector('.sheet-body');
+  var sheet=document.getElementById('sheet'), sb=sheet.querySelector('.sheet-body'), sbox=sheet.querySelector('.sheet-box');
+  function more(){ sbox.classList.toggle('more', sb.scrollHeight-sb.scrollTop-sb.clientHeight>4); }
+  sb.addEventListener('scroll', more, {passive:true});
+  window.addEventListener('resize', function(){ if(!sheet.hidden) more(); });
   function el(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
   function chips(group,label){
     var w=el('div','sgrp'+(label==='Tomorrow'?' tm':'')); w.appendChild(el('div','slab',label));
@@ -1076,6 +1091,8 @@ JS = """
     });
     sb.appendChild(el('p','snote','* Showtimes are collected automatically and can change. Please confirm on the theater\u2019s site before you go.'));
     sheet.hidden=false; document.documentElement.style.overflow='hidden';
+    sb.scrollTop=0; more();
+    [].forEach.call(sb.querySelectorAll('img'), function(im){ if(!im.complete) im.addEventListener('load', more); });
   }
   function close(){ sheet.hidden=true; document.documentElement.style.overflow=''; }
   document.addEventListener('click',function(e){
@@ -1153,7 +1170,12 @@ JS = """
       if(save){ try{ localStorage.setItem('view',m); }catch(e){} }
       if(m!=='list') VIEW.layout(true);
     }
-    btns.forEach(function(b){ b.addEventListener('click',function(){ stopTour(); apply(b.dataset.m,true); }); });
+    btns.forEach(function(b){ b.addEventListener('click',function(){ stopTour(); apply(b.dataset.m,true); cap.classList.remove('peek'); }); });
+    /* mouse hover: the caption shows the name of the icon under the pointer */
+    if(window.matchMedia && matchMedia('(hover: hover)').matches) btns.forEach(function(b){
+      b.addEventListener('mouseenter',function(){ if(b.getAttribute('aria-pressed')!=='true'){ cap.textContent=CAPS[b.dataset.m]; cap.classList.add('peek'); } });
+      b.addEventListener('mouseleave',function(){ cap.textContent=CAPS[VIEW.mode]; cap.classList.remove('peek'); });
+    });
     var saved=null; try{ saved=localStorage.getItem('view'); }catch(e){}
     var h=location.hash.slice(1);
     apply(CAPS[h]?h:(CAPS[saved]?saved:'cards'),false);
