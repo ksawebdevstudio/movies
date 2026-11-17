@@ -890,6 +890,15 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .tinfo b::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none}
 .tinfo a{color:var(--fg)} .tinfo .addr{color:var(--mut);display:block;margin:3px 0 6px;font-size:.8rem}
 .foot{font-size:.78rem;line-height:1.5} .foot p{margin:6px 0}
+/* author credit at the end of the page */
+.credit{text-align:center;margin:26px 0 6px}
+.credit .c1{color:var(--fg);font-size:.95rem} .credit .c1 b{font-weight:700}
+.credit .c2{color:var(--mut);font-size:.8rem;margin:2px 0 10px}
+.credit .c2 a{color:inherit}
+.cbtn{display:inline-flex;align-items:center;gap:8px;background:#f5b301;color:#15171c;font-weight:700;font-size:.85rem;text-decoration:none;
+  padding:8px 14px;border-radius:999px;transition:filter .15s,transform .15s;-webkit-tap-highlight-color:transparent}
+.cbtn:hover{filter:brightness(1.06)} .cbtn:active{transform:scale(.97)}
+.cbtn svg{width:16px;height:16px}
 .sth{display:block;color:var(--fg);text-decoration:none;background:var(--tb,rgba(136,136,136,.1));border-radius:10px;padding:10px 12px;margin-top:10px;transition:background .12s}
 .sth:hover{background:color-mix(in srgb,var(--tc,#888) 30%,transparent)}
 @media (prefers-color-scheme:light){.sth:hover{background:color-mix(in srgb,var(--tc,#888) 22%,transparent)}}
@@ -1341,7 +1350,11 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <p>* Showtimes are collected automatically from the theaters&rsquo; websites and can change or be incomplete. Please confirm on the theater&rsquo;s site before you go. Last updated {updated}.</p>
 <p>Tap a movie for its full schedule. Tap a showtime to open that showing on the theater&rsquo;s site (where the theater allows it), or the colored theater block to open the theater&rsquo;s page.{notes}</p>
 <p>This product uses the TMDB API but is not endorsed or certified by TMDB. Ratings are TMDB user scores.</p>
-</div></footer>
+</div>
+<div class="credit"><div class="c1">Made in Palm Springs by <b>Sergei</b></div>
+<div class="c2">Need a website or tech help? <a href="mailto:genius.gorilla.it@gmail.com">genius.gorilla.it@gmail.com</a></div>
+<a class="cbtn" href="mailto:genius.gorilla.it@gmail.com?subject=Website%20%2F%20IT%20help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email me</a></div>
+</footer>
 <div id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-box" role="dialog" aria-modal="true">
 <button class="sheet-x" aria-label="Close"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button><div class="sheet-body"></div></div></div>
 <script>{JS}</script>
