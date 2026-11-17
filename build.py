@@ -859,7 +859,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
   background:linear-gradient(to bottom,transparent,var(--card));opacity:0;transition:opacity .2s}
 .sheet-box.more::after{opacity:1}
 .sheet-x{position:absolute;z-index:2;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
-  display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer}
+  display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer;box-shadow:0 0 10px 6px var(--card)}
 .sheet-x svg{width:14px;height:14px;display:block}
 .shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
 .shead > img,.shead > .poster{width:92px;flex:none;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
