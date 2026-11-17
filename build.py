@@ -864,7 +864,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sheet-x svg{width:14px;height:14px;display:block}
 .shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
 .shead > img,.shead > .poster{width:92px;flex:none;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
-.shead > img{cursor:zoom-in}
+.shead > img{cursor:zoom-in;padding:0}   /* the 6px padding is for the text placeholder; on a photo it hid the rounded corners */
 /* tap the small poster in the popup: show it large */
 .zoom{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.82);
   cursor:zoom-out;opacity:0;transition:opacity .2s;will-change:opacity;-webkit-tap-highlight-color:transparent}
