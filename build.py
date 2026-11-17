@@ -961,10 +961,13 @@ body.lm #nowgrid{display:none}
   box-shadow:0 0 0 .5px color-mix(in srgb,var(--cline) 50%,transparent);padding:10px 12px 8px;margin:0 0 12px}
 body.pm .gcard,body.lm .glist{display:block}
 .gcard.inmas{margin:0}
-.gleg{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 6px}
-.gk{display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:500;padding:2px 8px;border-radius:7px;background:var(--tb);white-space:nowrap;line-height:1.5}
-.gk b{color:var(--tc);font-weight:700}
-.gk.tm{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent);padding:1px 7px}
+.gleg{display:flex;flex-wrap:wrap;gap:4px 6px;margin:0 0 6px}
+/* times as plain text; the theater shows as its letter on a small pastel square (the theater-block color) */
+.gk{display:inline-flex;align-items:center;font-size:.74rem;font-weight:500;color:var(--mut);white-space:nowrap;line-height:1.5}
+.gk b{display:inline-flex;align-items:center;justify-content:center;width:1.25em;height:1.25em;margin-right:4px;border-radius:4px;
+  background:var(--tb);color:color-mix(in srgb,var(--tc) 70%,var(--fg));font-weight:700;font-size:.92em}
+.gk.tm{text-decoration:underline dotted;text-underline-offset:3px}
+.gleg .gk{margin-right:6px}
 .gk.px{opacity:.5;text-decoration:line-through}
 .gsub{font-size:.74rem;color:var(--mut);margin:0 0 2px}
 .gw{display:flex;align-items:center;gap:9px;padding:6px 8px;margin:0 -8px;border-radius:8px;cursor:pointer;
@@ -976,11 +979,11 @@ body.pm .gcard,body.lm .glist{display:block}
   .gw:hover,.gw:nth-child(even of .gw):hover{background:#f5b301}
   .gw:hover .gn,.gw:hover .gr{color:#15171c}
   .gw:hover .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
-  .gw:hover .gk{background:rgba(255,255,255,.88);color:#15171c}}
+  .gw:hover .gk{color:#15171c} .gw:hover .gk b{background:rgba(255,255,255,.75);color:color-mix(in srgb,var(--tc) 45%,#15171c)}}
 .gw.tap,.gw:nth-child(even of .gw).tap{background:#f5b301;transform:scale(.985);transition-duration:.05s}
 .gw.tap .gn,.gw.tap .gr{color:#15171c}
 .gw.tap .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
-.gw.tap .gk{background:rgba(255,255,255,.88);color:#15171c}
+.gw.tap .gk{color:#15171c} .gw.tap .gk b{background:rgba(255,255,255,.75);color:color-mix(in srgb,var(--tc) 45%,#15171c)}
 .card.now{-webkit-tap-highlight-color:transparent}
 .card.now.tap{transform:scale(.97);transition:transform .05s}
 .gw:hover .gn{text-decoration:underline;text-underline-offset:3px}
@@ -988,8 +991,8 @@ body.pm .gcard,body.lm .glist{display:block}
 .gi{width:26px;height:38px;border-radius:6px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
 img.gi{object-fit:cover;padding:0;display:block}
 .gm{min-width:0;flex:1}
-.gn{font-size:.86rem;font-weight:600;line-height:1.25;margin:0 0 3px}
-.gcs{display:flex;flex-wrap:wrap;gap:3px}
+.gn{font-size:.95rem;font-weight:700;line-height:1.25;margin:0 0 3px}
+.gcs{display:flex;flex-wrap:wrap;gap:3px 10px}
 .gr{font-size:.74rem;flex:none;align-self:flex-start;margin-top:2px}
 .gmore{display:flex;align-items:center;gap:6px;padding:8px 0 2px;border-top:1px solid var(--cline);font-size:.76rem;color:var(--mut)}
 .gmore i{margin-left:auto;font-style:normal}
