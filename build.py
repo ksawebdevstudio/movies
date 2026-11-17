@@ -793,7 +793,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .meta{margin:4px 0 8px;font-size:.85rem}
 .rating{color:var(--acc);font-weight:600} .rating.few{color:var(--mut)} .votes{color:var(--mut);font-size:.75rem;margin-left:6px} .rating.none{color:var(--mut);font-weight:400}
 .th{--tc:#888;--tb:rgba(136,136,136,.10);display:block;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--tb);color:var(--fg);text-decoration:none;transition:filter .12s,transform .12s}
-.th:hover{filter:brightness(1.18)} .th:active{transform:scale(.98)}
+.th:hover{background:color-mix(in srgb,var(--tc) 30%,transparent)} .th:active{transform:scale(.98)}
+@media (prefers-color-scheme:light){.th:hover{background:color-mix(in srgb,var(--tc) 22%,transparent)}}
 /* four clearly different hues: red / green / blue / purple */
 [data-th="cinemark"]{--tc:#f0506a;--tb:rgba(240,80,106,.17)}
 [data-th="regal"]{--tc:#2fc48a;--tb:rgba(47,196,138,.16)}
@@ -889,8 +890,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .tinfo b::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none}
 .tinfo a{color:var(--fg)} .tinfo .addr{color:var(--mut);display:block;margin:3px 0 6px;font-size:.8rem}
 .foot{font-size:.78rem;line-height:1.5} .foot p{margin:6px 0}
-.sth{display:block;color:var(--fg);text-decoration:none;background:var(--tb,rgba(136,136,136,.1));border-radius:10px;padding:10px 12px;margin-top:10px;transition:filter .12s}
-.sth:hover{filter:brightness(1.15)}
+.sth{display:block;color:var(--fg);text-decoration:none;background:var(--tb,rgba(136,136,136,.1));border-radius:10px;padding:10px 12px;margin-top:10px;transition:background .12s}
+.sth:hover{background:color-mix(in srgb,var(--tc,#888) 30%,transparent)}
+@media (prefers-color-scheme:light){.sth:hover{background:color-mix(in srgb,var(--tc,#888) 22%,transparent)}}
 .sthn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.92rem}
 .sthn::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--tc,#888);flex:none}
 .sthn i{margin-left:auto;flex:none;white-space:nowrap;font-style:normal;font-weight:600;font-size:.75rem;color:#fff;background:var(--tc,#888);padding:4px 10px;border-radius:999px}
@@ -956,10 +958,25 @@ body.pm .gcard,body.lm .glist{display:block}
 .gk.tm{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent);padding:1px 7px}
 .gk.px{opacity:.5;text-decoration:line-through}
 .gsub{font-size:.74rem;color:var(--mut);margin:0 0 2px}
-.gw{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid var(--line);cursor:pointer}
+.gw{display:flex;align-items:center;gap:9px;padding:6px 8px;margin:0 -8px;border-radius:8px;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;transition:background .3s ease,transform .3s ease}
+.gw:nth-child(even of .gw){background:color-mix(in srgb,var(--fg) 6%,transparent)}
+@media (prefers-color-scheme:light){.gw:nth-child(even of .gw){background:color-mix(in srgb,var(--fg) 3.5%,transparent)}}
+/* hover (mouse) and tap: bright fill in the badge yellow, dark text, light chips */
+@media (hover:hover){
+  .gw:hover,.gw:nth-child(even of .gw):hover{background:#f5b301}
+  .gw:hover .gn,.gw:hover .gr{color:#15171c}
+  .gw:hover .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
+  .gw:hover .gk{background:rgba(255,255,255,.88);color:#15171c}}
+.gw.tap,.gw:nth-child(even of .gw).tap{background:#f5b301;transform:scale(.985);transition-duration:.05s}
+.gw.tap .gn,.gw.tap .gr{color:#15171c}
+.gw.tap .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
+.gw.tap .gk{background:rgba(255,255,255,.88);color:#15171c}
+.card.now{-webkit-tap-highlight-color:transparent}
+.card.now.tap{transform:scale(.97);transition:transform .05s}
 .gw:hover .gn{text-decoration:underline;text-underline-offset:3px}
 .gw.xtra{display:none} .gcard.all:not(.narrow) .gw.xtra{display:flex} .gcard.narrow .gw.mx{display:none}
-.gi{width:26px;height:38px;border-radius:4px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
+.gi{width:26px;height:38px;border-radius:6px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
 img.gi{object-fit:cover;padding:0;display:block}
 .gm{min-width:0;flex:1}
 .gn{font-size:.86rem;font-weight:600;line-height:1.25;margin:0 0 3px}
@@ -1149,8 +1166,28 @@ JS = """
     if(bt && !bt.classList.contains('past')){ e.preventDefault(); window.open(bt.dataset.buy,'_blank','noopener'); return; }
     if(e.target.closest('a')) return;            /* theater block: follow the link */
     var c=e.target.closest('.card.now');
-    if(c) open(c);
+    if(c) pressOpen(c,c);
   });
+  /* tap feedback: the pressed card or row lights up (not while scrolling), and the popup opens
+     a moment later, so even a quick tap is seen */
+  var pressT=null, pressEl=null, pressX=0, pressY=0;
+  function pressable(t){ return !t.closest('a, button, .t[data-buy], .c[data-buy], #sheet, .zoom') && t.closest('.gw, .card.now'); }
+  function unpress(el,wait){ setTimeout(function(){ el.classList.remove('tap'); }, wait||0); }
+  document.addEventListener('pointerdown',function(e){
+    var w=pressable(e.target); if(!w) return;
+    pressEl=w; pressX=e.clientX; pressY=e.clientY; w._t=0;
+    pressT=setTimeout(function(){ w.classList.add('tap'); w._t=Date.now(); },70);
+  },true);
+  document.addEventListener('pointermove',function(e){
+    if(pressEl && (Math.abs(e.clientX-pressX)>8 || Math.abs(e.clientY-pressY)>8)){ clearTimeout(pressT); pressEl.classList.remove('tap'); pressEl=null; }
+  },true);
+  function release(){ clearTimeout(pressT); if(pressEl && pressEl._t) unpress(pressEl, Math.max(0,180-(Date.now()-pressEl._t))); pressEl=null; }
+  document.addEventListener('pointerup',release,true);
+  document.addEventListener('pointercancel',function(){ clearTimeout(pressT); if(pressEl) pressEl.classList.remove('tap'); pressEl=null; },true);
+  function pressOpen(fl,card){
+    fl.classList.add('tap'); fl._t=fl._t||Date.now();
+    setTimeout(function(){ open(card); unpress(fl,80); },120);
+  }
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape' && zoom){ zoomOut(); return; }
     if(e.key==='Escape' && !sheet.hidden){ close(); return; }
@@ -1193,7 +1230,7 @@ JS = """
       m.appendChild(cs); w.appendChild(m);
       var rt=c.querySelector('.rating');
       w.appendChild(el('div','gr rating'+(rt && rt.classList.contains('few')?' few':''), rt && !rt.classList.contains('none') ? rt.textContent : ''));
-      w.addEventListener('click',function(){ open(c); });
+      w.addEventListener('click',function(){ pressOpen(w,c); });
       return w;
     }
     var SUB='Next showing at each theater';
