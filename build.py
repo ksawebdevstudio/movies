@@ -1071,16 +1071,24 @@ JS = """
 /* ---- visit statistics: anonymous counts of actions (GoatCounter). Nothing personal, no coordinates, no film titles ---- */
 (function(){
   var live=!!document.querySelector('script[data-goatcounter]'), q=[], waiting=false, tries=0, errN=0;
+  /* if the statistics script is blocked (ad blocker, offline, private mode) everything here quietly does nothing */
+  function stop(){ live=false; q.length=0; waiting=false; }
+  var tag=document.querySelector('script[data-goatcounter]'); if(tag) tag.addEventListener('error',stop);
   function flush(){
-    var g=window.goatcounter;
-    if(g && typeof g.count==='function'){ while(q.length){ var a=q.shift(); g.count({path:a[0], title:a[1], event:true}); } waiting=false; }
-    else if(++tries<40){ waiting=true; setTimeout(flush,500); }
+    try{
+      var g=window.goatcounter;
+      if(g && typeof g.count==='function'){ while(q.length){ var a=q.shift(); g.count({path:a[0], title:a[1], event:true}); } waiting=false; }
+      else if(++tries<40){ waiting=true; setTimeout(flush,500); }
+      else stop();
+    }catch(e){ stop(); }
   }
   /* once=true: at most once per visit (browser tab session) */
   window.__ev=function(path,title,once){
-    if(!live) return;
-    if(once){ try{ var k='ev:'+(typeof once==='string'?once:path); if(sessionStorage.getItem(k)) return; sessionStorage.setItem(k,'1'); }catch(e){} }
-    q.push([path,title||path]); if(!waiting) flush();
+    try{
+      if(!live) return;
+      if(once){ try{ var k='ev:'+(typeof once==='string'?once:path); if(sessionStorage.getItem(k)) return; sessionStorage.setItem(k,'1'); }catch(e){} }
+      q.push([path,title||path]); if(!waiting) flush();
+    }catch(e){}
   };
   var ev=window.__ev, B=document.body;
   /* who: new or returning (the first-visit hint flag already exists for the icon tour), theme, installed app */
