@@ -1,8 +1,11 @@
 # In Theaters - Coachella Valley
 
-Personal page: what is playing TODAY at Festival Theaters (Palm Springs), Cinemark Century at the
-River + XD and Regal Rancho Mirage (showtimes taken from the theaters' own sites; tap a time to open
-that movie there), plus upcoming US releases (TMDB). IMAX showtimes are tagged; other 3D showtimes
+Personal page: what is playing TODAY at Festival Theaters (Palm Springs), Mary Pickford (Cathedral
+City), Cinemark Century at the River + XD and Regal Rancho Mirage, and Cinemark Century La Quinta
+(showtimes taken from the theaters' own sites; tap a time to open that movie there), plus upcoming
+US releases (TMDB). Theaters are listed west to east; an optional pin in the view switcher sorts them
+nearest first (location stays in the browser). Version history: branch `v1-stable` is the site before
+La Quinta and nearest-first sorting. IMAX showtimes are tagged; other 3D showtimes
 are hidden (`HIDE_NON_IMAX_3D` in build.py).
 
 ## Setup (one time)
