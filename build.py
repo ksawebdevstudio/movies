@@ -99,7 +99,7 @@ BIGSCREEN_PICKFORD = "https://www.bigscreen.com/Marquee.php?theater=7873&view=sc
 DPLACE_BASE = "https://www.dplaceentertainment.com"
 # Visit statistics (GoatCounter: no cookies, no personal data). Put the site code here (the part before
 # ".goatcounter.com"). While it is empty the page has no statistics script and sends nothing anywhere.
-GOATCOUNTER_CODE = ""
+GOATCOUNTER_CODE = "geniusgorilla"
 DPLACE_THEATRE_ID = "0000000673"
 # D'Place answered GitHub's server with "405 Not Allowed" while the default Accept header was sent;
 # these are the ordinary headers of a page request (same honest User-Agent).
