@@ -97,6 +97,9 @@ BIGSCREEN_REGAL = "https://www.bigscreen.com/Marquee.php?theater=6355&view=sched
 # the theater's own D'Place page gives direct movie links, a cross-check and a backup.
 BIGSCREEN_PICKFORD = "https://www.bigscreen.com/Marquee.php?theater=7873&view=sched&showdate={date}"
 DPLACE_BASE = "https://www.dplaceentertainment.com"
+# Visit statistics (GoatCounter: no cookies, no personal data). Put the site code here (the part before
+# ".goatcounter.com"). While it is empty the page has no statistics script and sends nothing anywhere.
+GOATCOUNTER_CODE = "geniusgorilla"
 DPLACE_THEATRE_ID = "0000000673"
 # D'Place answered GitHub's server with "405 Not Allowed" while the default Accept header was sent;
 # these are the ordinary headers of a page request (same honest User-Agent).
@@ -1065,6 +1068,69 @@ img.gi{opacity:.6;transition:opacity .15s}
 """
 
 JS = """
+/* ---- visit statistics: anonymous counts of actions (GoatCounter). Nothing personal, no coordinates, no film titles ---- */
+(function(){
+  var live=!!document.querySelector('script[data-goatcounter]'), q=[], waiting=false, tries=0, errN=0;
+  /* if the statistics script is blocked (ad blocker, offline, private mode) everything here quietly does nothing */
+  function stop(){ live=false; q.length=0; waiting=false; }
+  var tag=document.querySelector('script[data-goatcounter]'); if(tag) tag.addEventListener('error',stop);
+  function flush(){
+    try{
+      var g=window.goatcounter;
+      if(g && typeof g.count==='function'){ while(q.length){ var a=q.shift(); g.count({path:a[0], title:a[1], event:true}); } waiting=false; }
+      else if(++tries<40){ waiting=true; setTimeout(flush,500); }
+      else stop();
+    }catch(e){ stop(); }
+  }
+  /* once=true: at most once per visit (browser tab session) */
+  window.__ev=function(path,title,once){
+    try{
+      if(!live) return;
+      if(once){ try{ var k='ev:'+(typeof once==='string'?once:path); if(sessionStorage.getItem(k)) return; sessionStorage.setItem(k,'1'); }catch(e){} }
+      q.push([path,title||path]); if(!waiting) flush();
+    }catch(e){}
+  };
+  var ev=window.__ev, B=document.body;
+  /* who: new or returning (the first-visit hint flag already exists for the icon tour), theme, installed app */
+  var ret=false; try{ ret=!!localStorage.getItem('viewHint'); }catch(e){}
+  ev(ret?'visit/returning':'visit/new', ret?'Returning visitor':'New visitor', 'visit');
+  ev(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'theme/dark':'theme/light', 'Theme', true);
+  if((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone) ev('pwa/standalone','Opened from the home screen',true);
+  if(!navigator.geolocation) ev('geo/unsupported','Location not supported',true);
+  /* the popup with the full schedule opened */
+  var sh=document.getElementById('sheet');
+  if(sh && window.MutationObserver) new MutationObserver(function(){ if(!sh.hidden) ev('popup/open','Schedule popup opened'); }).observe(sh,{attributes:true,attributeFilter:['hidden']});
+  /* clicks: theater link, ticket link, which showtime and format, and which place in the list (nearest first) */
+  var laTime=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',hourCycle:'h23'});
+  function nowMin(){ var p=laTime.formatToParts(new Date()), h=0, m=0; p.forEach(function(x){ if(x.type==='hour') h=+x.value%24; if(x.type==='minute') m=+x.value; }); return h*60+m; }
+  document.addEventListener('click',function(e){
+    var t=e.target; if(!t || !t.closest) return;
+    var blk=t.closest('a.th, .sth'); if(!blk || !blk.dataset.th) return;
+    var th=blk.dataset.th, surface=blk.classList.contains('sth')?'popup':'card';
+    var chip=t.closest('.t, .c');
+    if(chip && chip.classList.contains('past')){ return; }
+    if(chip && chip.dataset.buy) ev('ticket/'+th, 'Ticket link: '+th+' ('+surface+')');
+    else ev('theater/open/'+th, 'Theater page: '+th+' ('+surface+')');
+    if(B.classList.contains('geoOn')){      /* with nearest-first on: which place in the list did they pick */
+      var sib=[].slice.call(blk.parentNode.querySelectorAll(blk.classList.contains('sth')?':scope > .sth':':scope > a.th')).filter(function(x){ return !x.hidden; });
+      var rank=sib.indexOf(blk)+1; if(rank>0) ev('geo/rank/'+rank, 'Nearest-first: place in the list picked ('+rank+')');
+    }
+    if(chip){
+      var txt=chip.textContent||'', tm=txt.match(/(\\d{1,2}):(\\d\\d)\\s*([AP])M/);
+      var label=txt.replace(/(\\d{1,2}):(\\d\\d)\\s*([AP])M/,'').replace(/[^A-Za-z0-9 -]/g,'').trim().replace(/ +/g,'-').toLowerCase().slice(0,16);
+      ev('format/click/'+(label||'regular'), 'Showtime format clicked');
+      if(tm){
+        var h=(+tm[1])%12+(tm[3]==='P'?12:0), mins=h*60+(+tm[2]);
+        var tomorrow=!!chip.closest('.d1, .tm');
+        ev('showtime/slot/'+(h<12?'morning':h<17?'afternoon':h<21?'evening':'late'), 'Showtime clicked: time of day');
+        var lead=tomorrow?'tomorrow':(mins-nowMin()<60?'under-1h':mins-nowMin()<180?'1-3h':'later-today');
+        ev('showtime/lead/'+lead, 'Showtime clicked: how soon');
+      }
+    }
+  },true);
+  /* problems on the visitor's side (message only, at most 3 per visit) */
+  window.addEventListener('error',function(e){ if(++errN<=3) ev('error/js','JS error: '+String(e.message||'').slice(0,80)+' line '+(e.lineno||0)); });
+})();
 (function(){
   var B=document.body, d0=B.dataset.d0, d1=B.dataset.d1, ok=(B.dataset.tmrwOk||'').split(',');
   var day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date());
@@ -1316,12 +1382,18 @@ JS = """
         if(pin) pin.classList.remove('busy');
         var pos=[p.coords.latitude,p.coords.longitude]; keys.forEach(function(k){ dist[k]=mi(pos,GEO[k]); });
         on=true; try{ localStorage.setItem('geoOn','1'); }catch(e){} order();
+        if(window.__ev){
+          __ev(quiet?'geo/auto-ok':'geo/granted', quiet?'Location: refreshed on return':'Location allowed', quiet);
+          var near=Math.min.apply(null,keys.map(function(k){ return dist[k]; }));
+          __ev('geo/zone/'+(near<10?'under-10mi':near<30?'10-30mi':'over-30mi'), 'Distance to the nearest theater (rough)', true);
+        }
       }, function(err){
         if(pin) pin.classList.remove('busy');
+        if(window.__ev) __ev((quiet?'geo/auto-':'geo/')+(err && err.code===1 ? 'denied':'error'), 'Location not available', quiet);
         off(); if(!quiet) toast(err && err.code===1 ? 'Location is blocked for this site' : 'Could not get your location');
       }, {timeout:8000, maximumAge:600000});
     }
-    if(pin) pin.addEventListener('click',function(){ if(on) off(); else locate(false); });
+    if(pin) pin.addEventListener('click',function(){ if(on){ if(window.__ev) __ev('geo/off','Nearest-first switched off'); off(); } else { if(window.__ev) __ev('geo/on','Nearest-first switched on'); locate(false); } });
     order();                                                    /* default: west -> east, nothing about distance */
     var want=false; try{ want=localStorage.getItem('geoOn')==='1'; }catch(e){}
     if(want) locate(true);                                      /* switched on earlier: refresh the position on this visit */
@@ -1398,7 +1470,7 @@ JS = """
       if(save){ try{ localStorage.setItem('view',m); }catch(e){} }
       if(m!=='list') VIEW.layout(true);
     }
-    btns.forEach(function(b){ b.addEventListener('click',function(){ stopTour(); apply(b.dataset.m,true); cap.classList.remove('peek'); }); });
+    btns.forEach(function(b){ b.addEventListener('click',function(){ stopTour(); apply(b.dataset.m,true); cap.classList.remove('peek'); if(window.__ev) __ev('view/switch/'+b.dataset.m,'View switched to '+b.dataset.m); }); });
     /* mouse hover: the caption shows the name of the icon under the pointer */
     if(window.matchMedia && matchMedia('(hover: hover)').matches) btns.forEach(function(b){
       b.addEventListener('mouseenter',function(){ if(b.getAttribute('aria-pressed')!=='true'){ cap.textContent=CAPS[b.dataset.m]; cap.classList.add('peek'); } });
@@ -1407,6 +1479,7 @@ JS = """
     var saved=null; try{ saved=localStorage.getItem('view'); }catch(e){}
     var h=location.hash.slice(1);
     apply(CAPS[h]?h:(CAPS[saved]?saved:'cards'),false);
+    if(window.__ev) __ev('view/load/'+VIEW.mode,'View on load: '+VIEW.mode,true);
 
     /* first visit only: light up the inactive icons one by one (no caption change) */
     var seen=true; try{ seen=!!localStorage.getItem('viewHint'); localStorage.setItem('viewHint','1'); }catch(e){}
@@ -1423,6 +1496,8 @@ JS = """
 
 
 def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
+    gc_tag = (f'<script data-goatcounter="https://{GOATCOUNTER_CODE}.goatcounter.com/count" async '
+              f'src="//gc.zgo.at/count.js"></script>\n') if GOATCOUNTER_CODE else ""
     others = {k: [norm(g["title"]) for g in movies if k in g["by_theater"]] for k, _ in THEATERS}
     now_html = "\n".join(now_card(g, i, today, others) for i, g in enumerate(movies))
     soon_html = "\n".join(soon_card(m, i) for i, m in enumerate(soon))
@@ -1482,7 +1557,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 </footer>
 <div id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-box" role="dialog" aria-modal="true">
 <button class="sheet-x" aria-label="Close"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button><div class="sheet-body"></div></div></div>
-<script>{JS}</script>
+{gc_tag}<script>{JS}</script>
 </body></html>"""
 
 
