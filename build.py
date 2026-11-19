@@ -998,11 +998,11 @@ body.pm .gcard,body.lm .glist{display:block}
 @media (prefers-color-scheme:light){.gw:nth-child(even of .gw){background:color-mix(in srgb,var(--fg) 3.5%,transparent)}}
 /* hover (mouse) and tap: bright fill in the badge yellow, dark text, light chips */
 @media (hover:hover){
-  .gw:hover,.gw:nth-child(even of .gw):hover{background:#f5b301}
+  .gw:hover,.gw:nth-child(even of .gw):hover{background:var(--hl)}
   .gw:hover .gn,.gw:hover .gr{color:#15171c}
   .gw:hover .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
   .gw:hover .gk{color:#15171c} .gw:hover .gk b{background:rgba(255,255,255,.75);color:color-mix(in srgb,var(--tc) 45%,#15171c)}}
-.gw.tap,.gw:nth-child(even of .gw).tap{background:#f5b301;transform:scale(.985);transition-duration:.05s}
+.gw.tap,.gw:nth-child(even of .gw).tap{background:var(--hl);transform:scale(.985);transition-duration:.05s}
 .gw.tap .gn,.gw.tap .gr{color:#15171c}
 .gw.tap .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
 .gw.tap .gk{color:#15171c} .gw.tap .gk b{background:rgba(255,255,255,.75);color:color-mix(in srgb,var(--tc) 45%,#15171c)}
@@ -1025,7 +1025,7 @@ img.gi{object-fit:cover;padding:0;display:block}
 
 /* nearest-first toggle: a pin in the view switcher; off by default, a soft yellow tint when on */
 .mode{grid-auto-columns:auto}
-.mode .gpin{display:flex;position:relative;width:44px;height:30px;margin-left:5px;border-radius:999px;align-items:center;justify-content:center}
+.mode .gpin{display:flex;position:relative;width:38px;height:30px;margin-left:5px;border-radius:999px;align-items:center;justify-content:center}
 .mode .gpin::before{content:"";position:absolute;left:-4px;top:7px;bottom:7px;width:1px;background:var(--cline)}
 .mode .gpin svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2}
 .mode .gpin[aria-pressed="true"]{background:color-mix(in srgb,#f5b301 15%,transparent);color:color-mix(in srgb,#f5b301 65%,var(--mut));box-shadow:none}
@@ -1035,15 +1035,16 @@ img.gi{object-fit:cover;padding:0;display:block}
 .gtoast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--chip);color:var(--fg);padding:7px 14px;border-radius:999px;font-size:.8rem;box-shadow:0 2px 10px rgba(0,0,0,.3);z-index:60}
 /* distances (only while the toggle is on): cards on mouse devices on hover, popup everywhere; kept pale */
 .th{position:relative}
-.thn .dist{display:none;font-size:.85em;color:var(--fg);white-space:nowrap}
+.thn .dist{display:none}
+.times .dist{display:none;margin-left:auto;align-self:flex-end;font-size:.72rem;font-weight:400;color:var(--fg);white-space:nowrap;padding:0 1px 1px 8px;line-height:1.2;opacity:0;transition:opacity .15s}
 @media (hover:hover) and (pointer:fine){
-  body.geoOn .th .thn .dist{display:inline;opacity:0;transition:opacity .15s;position:absolute;right:10px;bottom:8px;margin:0;line-height:1}
-  body.geoOn .card.now:hover .th .thn .dist{opacity:.45}}
+  body.geoOn .times .dist{display:inline}
+  body.geoOn .card.now:hover .times .dist{opacity:.45}}
 .sdist{margin-left:auto;align-self:flex-end;font-size:.72rem;font-weight:400;color:var(--fg);opacity:.3;white-space:nowrap;padding:0 2px 2px 8px}
 @media (hover:hover) and (pointer:fine){.sdist{opacity:.45}}
 /* titles: highest contrast; list rows: quieter posters, theaters and times so the title leads */
-:root{--ttl:#eceef2}
-@media (prefers-color-scheme:light){:root{--ttl:#000}}
+:root{--ttl:#eceef2;--hl:color-mix(in srgb,#f5b301 90%,var(--card))}
+@media (prefers-color-scheme:light){:root{--ttl:#000;--hl:color-mix(in srgb,#f5b301 70%,var(--card))}}
 .gn,.card h3,.stitle h3{color:var(--ttl)}
 img.gi{opacity:.6;transition:opacity .15s}
 .gw .gcs{opacity:.7}
@@ -1284,7 +1285,10 @@ JS = """
       document.querySelectorAll('.gleg').forEach(function(g){
         [].slice.call(g.children).sort(function(a,b){ return rank[a.dataset.th]-rank[b.dataset.th]; }).forEach(function(k){ g.appendChild(k); }); });
       document.querySelectorAll('a.th').forEach(function(r){
-        var s=r.querySelector('.thn .dist'); if(!s){ s=el('span','dist'); var n=r.querySelector('.thn'); n.insertBefore(s, n.querySelector('i')); }
+        /* the distance sits at the end of the last visible row of showtimes: it shares the row when there is room, and otherwise wraps to its own line, so the card gets taller only when it has to */
+        var s=r.querySelector('.dist'); if(!s) s=el('span','dist');
+        var gs=[].slice.call(r.querySelectorAll('.times')).filter(function(g){ return !g.hidden; }), lg=gs[gs.length-1];
+        if(lg && s.parentNode!==lg) lg.appendChild(s);
         s.textContent=on ? label(dist[r.dataset.th]) : ''; if(on) r.dataset.dist=s.textContent; else delete r.dataset.dist;
       });
       B.classList.toggle('geoOn',on);
