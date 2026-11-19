@@ -46,26 +46,39 @@ EVENT_WEAK = re.compile(r"\b(opera|ballet|concert|live|encore|tour|fight night|b
                         r"marathon|double feature|festival)\b", re.I)        # fewer showtimes than this for a theater on a day = probably broken, raise an alert
 
 # Order = display order on the cards.
+# Default order: west to east along the valley (Palm Springs -> La Quinta); the page re-sorts by distance
+# when the visitor allows location.
 THEATERS = [
     ("festival", "Festival Theaters"),
+    ("pickford", "Mary Pickford Theatre"),
     ("cinemark", "Cinemark Century at the River + XD"),
     ("regal", "Regal Rancho Mirage"),
-    ("pickford", "Mary Pickford Theatre"),
+    ("laquinta", "Cinemark Century La Quinta XD + ScreenX"),
 ]
+# Approximate coordinates (lat, lon) for the distance sort.
+THEATER_GEO = {   # theater addresses, rounded to 4 decimals (about 30 ft); distances are shown to 0.1 mi at best
+    "festival": (33.8228, -116.5398),   # 789 E Tahquitz Canyon Way, Palm Springs
+    "pickford": (33.7811, -116.4631),   # 36850 Pickfair St, Cathedral City
+    "cinemark": (33.7396, -116.4095),   # 71800 Hwy 111, Rancho Mirage (The River)
+    "regal": (33.7998, -116.3927),      # 72777 Dinah Shore Dr, Rancho Mirage
+    "laquinta": (33.7089, -116.2927),   # 46800 Washington St, La Quinta
+}
 THEATER_NAMES = dict(THEATERS)
-SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal", "pickford": "Mary Pickford"}  # used on phones
+SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal", "pickford": "Mary Pickford", "laquinta": "La Quinta"}  # used on phones
 # Where the "open showtimes" link goes when a theater could not be read.
 THEATER_URLS = {
     "festival": "https://festivaltheaters.com/buy-tickets/",
     "cinemark": "https://www.cinemark.com/theatres/ca-rancho-mirage/cinemark-century-at-the-river-and-xd",
     "regal": "https://www.regmovies.com/theatres/regal-rancho-mirage-1801",
     "pickford": "https://www.dplaceentertainment.com/california/cathedral-city/0000000673/showtimes",
+    "laquinta": "https://www.cinemark.com/theatres/ca-la-quinta/cinemark-century-la-quinta-xd-and-screenx",
 }
 THEATER_ADDR = {
     "festival": "789 E Tahquitz Canyon Way, Palm Springs",
     "cinemark": "71800 Hwy 111, Suite A-137, Rancho Mirage",
     "regal": "72-777 Dinah Shore Dr, Rancho Mirage",
     "pickford": "36850 Pickfair St, Cathedral City",
+    "laquinta": "46800 Washington St, La Quinta",
 }
 TMDB_GENRES = {28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime", 99: "Documentary",
                18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History", 27: "Horror", 10402: "Music",
@@ -74,6 +87,7 @@ TMDB_GENRES = {28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80:
 NOTES = []  # extra footer lines (e.g. which backup source was used)
 
 CINEMARK_ID = 479
+CINEMARK_LQ_ID = 1126   # Cinemark Century La Quinta XD and SCREENX (from cinemark.com/theatre-1126)
 CINEMARK_BASE = "https://www.cinemark.com"
 REGAL_BASE = "https://www.regmovies.com"
 REGAL_SITE = "1801"
@@ -152,12 +166,13 @@ def fmt_of(attrs, imax):
     return "D-BOX" if re.search(r"d-?\s?box", attrs, re.I) else ""
 
 
-def parse_cinemark(data, today):
+def parse_cinemark(data, today, key="cinemark", tid=None):
+    tid = tid or CINEMARK_ID
     out = []
     for m in data:
         # The movie page of cinemark.com lists several theaters and asks where you are, so the colored block
         # opens this theater's own page instead; each time opens that showing's seat map at this theater.
-        url = THEATER_URLS["cinemark"]
+        url = THEATER_URLS[key]
         movie_id = m.get("cinemarkMovieId") or m.get("movieId")
         rt = m.get("movieRuntimeMinutes") or None
         genre = m.get("movieGenre") or None
@@ -177,8 +192,8 @@ def parse_cinemark(data, today):
                         buy = f"{CINEMARK_BASE}/TicketSeatMap/?" + urllib.parse.urlencode(
                             {"cinemarkMovieId": movie_id, "linkedShowtimeId": s.get("linkedShowtimeId") or 0,
                              "showtime": ts.strftime("%Y-%m-%dT%H:%M:%S"), "showtimeId": s["id"],
-                             "theaterId": CINEMARK_ID})
-                    out.append(dict(theater="cinemark", title=m.get("movieTitle", ""), ts=ts,
+                             "theaterId": tid})
+                    out.append(dict(theater=key, title=m.get("movieTitle", ""), ts=ts,
                                     fmt=fmt_of(name, imax), url=url, buy=buy, tmdb_id=None, poster=poster, rt=rt,
                                     genre=genre))
     return out
@@ -290,6 +305,12 @@ def parse_festival(data, today):
 def fetch_cinemark(today):
     q = urllib.parse.urlencode({"date": today, "timeZone": "America/Los_Angeles"})
     return parse_cinemark(json.loads(http(f"{CINEMARK_BASE}/papi/theaters/{CINEMARK_ID}/showtimes?{q}")), today)
+
+
+def fetch_laquinta(today):
+    q = urllib.parse.urlencode({"date": today, "timeZone": "America/Los_Angeles"})
+    return parse_cinemark(json.loads(http(f"{CINEMARK_BASE}/papi/theaters/{CINEMARK_LQ_ID}/showtimes?{q}")), today,
+                          key="laquinta", tid=CINEMARK_LQ_ID)
 
 
 def fetch_regal(day, official=True):
@@ -526,7 +547,7 @@ def norm(t):
 # These theaters' pages cannot open one movie for our theater (their movie pages ask where you are), so the
 # colored block opens the theater's page and a "text fragment" scrolls it to the movie's title and highlights it.
 # Browsers that do not know text fragments, or a title that is not found, simply show the top of the page.
-FRAGMENT_THEATERS = ("cinemark", "regal", "pickford")
+FRAGMENT_THEATERS = ("cinemark", "regal", "pickford", "laquinta")
 
 
 def text_fragment(title, theater, others):
@@ -690,7 +711,7 @@ def build_movies(showings, use_tmdb):
             g["label"] = f'Re-release <i>{g["year_hint"]}</i>'
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
-            g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford")
+            g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford", "laquinta")
                                 if k in g["alt_posters"]), None)
     movies.sort(key=sort_key)
     return movies
@@ -795,16 +816,18 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .th{--tc:#888;--tb:rgba(136,136,136,.10);display:block;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--tb);color:var(--fg);text-decoration:none;transition:filter .12s,transform .12s}
 .th:hover{background:color-mix(in srgb,var(--tc) 30%,transparent)} .th:active{transform:scale(.98)}
 @media (prefers-color-scheme:light){.th:hover{background:color-mix(in srgb,var(--tc) 22%,transparent)}}
-/* four clearly different hues: red / green / blue / purple */
+/* red / green / blue / purple, plus a muted honey for La Quinta */
 [data-th="cinemark"]{--tc:#f0506a;--tb:rgba(240,80,106,.17)}
 [data-th="regal"]{--tc:#2fc48a;--tb:rgba(47,196,138,.16)}
 [data-th="festival"]{--tc:#5b8cff;--tb:rgba(91,140,255,.18)}
 [data-th="pickford"]{--tc:#b98cff;--tb:rgba(170,120,255,.18)}
+[data-th="laquinta"]{--tc:#d6a24c;--tb:rgba(214,162,76,.16)}
 @media (prefers-color-scheme:light){
 [data-th="cinemark"]{--tc:#d7193a;--tb:rgba(215,25,58,.08)}
 [data-th="regal"]{--tc:#0f9d64;--tb:rgba(15,157,100,.09)}
 [data-th="festival"]{--tc:#2d63e0;--tb:rgba(45,99,224,.09)}
-[data-th="pickford"]{--tc:#7a3fd6;--tb:rgba(122,63,214,.09)}}
+[data-th="pickford"]{--tc:#7a3fd6;--tb:rgba(122,63,214,.09)}
+[data-th="laquinta"]{--tc:#a8741a;--tb:rgba(168,116,26,.13)}}
 .th .thn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none;margin:4px 6px 0 0}
 .th .thn{justify-content:flex-start} .th .thn i{margin-left:auto}
 .th .t{background:rgba(255,255,255,.07)}
@@ -966,7 +989,6 @@ body.pm .gcard,body.lm .glist{display:block}
 .gk{display:inline-flex;align-items:center;font-size:.74rem;font-weight:500;color:var(--mut);white-space:nowrap;line-height:1.5}
 .gk b{display:inline-flex;align-items:center;justify-content:center;width:1.25em;height:1.25em;margin-right:4px;border-radius:4px;
   background:var(--tb);color:color-mix(in srgb,var(--tc) 70%,var(--fg));font-weight:700;font-size:.92em}
-.gk.tm{text-decoration:underline dotted;text-underline-offset:3px}
 .gleg .gk{margin-right:6px}
 .gk.px{opacity:.5;text-decoration:line-through}
 .gsub{font-size:.74rem;color:var(--mut);margin:0 0 2px}
@@ -1000,6 +1022,35 @@ img.gi{object-fit:cover;padding:0;display:block}
 .gcard.narrow .gmore.btn,.gcard:not(.narrow) .gmore.hint{display:none}
 .lcols{display:grid;grid-template-columns:1fr;gap:0 28px}
 @media (min-width:732px){.lcols{grid-template-columns:1fr 1fr}}
+
+/* nearest-first toggle: a pin in the view switcher; off by default, a soft yellow tint when on */
+.mode{grid-auto-columns:auto}
+.mode .gpin{display:flex;position:relative;width:44px;height:30px;margin-left:5px;border-radius:999px;align-items:center;justify-content:center}
+.mode .gpin::before{content:"";position:absolute;left:-4px;top:7px;bottom:7px;width:1px;background:var(--cline)}
+.mode .gpin svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2}
+.mode .gpin[aria-pressed="true"]{background:color-mix(in srgb,#f5b301 15%,transparent);color:color-mix(in srgb,#f5b301 65%,var(--mut));box-shadow:none}
+@media (prefers-color-scheme:light){.mode .gpin[aria-pressed="true"]{background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc)}}
+.gpin.busy svg{animation:gpb .8s ease-in-out infinite alternate}
+@keyframes gpb{to{opacity:.35}}
+.gtoast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--chip);color:var(--fg);padding:7px 14px;border-radius:999px;font-size:.8rem;box-shadow:0 2px 10px rgba(0,0,0,.3);z-index:60}
+/* distances (only while the toggle is on): cards on mouse devices on hover, popup everywhere; kept pale */
+.th{position:relative}
+.thn .dist{display:none;font-size:.85em;color:var(--fg);white-space:nowrap}
+@media (hover:hover) and (pointer:fine){
+  body.geoOn .th .thn .dist{display:inline;opacity:0;transition:opacity .15s;position:absolute;right:10px;bottom:8px;margin:0;line-height:1}
+  body.geoOn .card.now:hover .th .thn .dist{opacity:.45}}
+.sdist{margin-left:auto;align-self:flex-end;font-size:.72rem;font-weight:400;color:var(--fg);opacity:.3;white-space:nowrap;padding:0 2px 2px 8px}
+@media (hover:hover) and (pointer:fine){.sdist{opacity:.45}}
+/* titles: highest contrast; list rows: quieter posters, theaters and times so the title leads */
+:root{--ttl:#eceef2}
+@media (prefers-color-scheme:light){:root{--ttl:#000}}
+.gn,.card h3,.stitle h3{color:var(--ttl)}
+img.gi{opacity:.6;transition:opacity .15s}
+.gw .gcs{opacity:.7}
+@media (hover:hover){.gw:hover img.gi{opacity:1} .gw:hover .gcs{opacity:1}}
+.gw.tap img.gi,.gw.tap .gcs{opacity:1}
+.sth[data-th="laquinta"] .sthn i{color:#15171c}
+@media (prefers-color-scheme:light){.sth[data-th="laquinta"] .sthn i{color:#fff}}
 [hidden]{display:none!important}
 """
 
@@ -1164,6 +1215,7 @@ JS = """
       hd.appendChild(el('i',null,'Open \u2197')); box.appendChild(hd);
       if(r._today) box.appendChild(chips(r._today,'Today'));
       if(r._tmrw) box.appendChild(chips(r._tmrw,'Tomorrow'));
+      if(r.dataset.dist){ var lc=box.querySelectorAll('.schips'); if(lc.length) lc[lc.length-1].appendChild(el('span','sdist',r.dataset.dist)); }
       sb.appendChild(box);
     });
     sb.appendChild(el('p','snote','* Showtimes are collected automatically and can change. Please confirm on the theater\u2019s site before you go.'));
@@ -1205,20 +1257,77 @@ JS = """
     if(e.key==='Escape' && !sheet.hidden){ close(); return; }
     if((e.key==='Enter'||e.key===' ') && e.target.classList && e.target.classList.contains('now')){ e.preventDefault(); open(e.target); }
   });
+
+  /* ---- theater order: fixed west -> east; theaters with nothing left to show today sink to the bottom of each card;
+         optional "nearest first" pin (off by default, remembered; distances appear only while it is on) ---- */
+  (function(){
+    var GEO={}; try{ GEO=JSON.parse(B.dataset.geo||'{}'); }catch(e){}
+    var keys=Object.keys(GEO); if(!keys.length) return;
+    var WEST=keys.slice(), pin=document.getElementById('geo'), cap=document.getElementById('modecap'), dist={}, on=false;
+    if(pin && !navigator.geolocation) pin.hidden=true;
+    function mi(a,b){ var R=3958.8,t=Math.PI/180,dl=(b[0]-a[0])*t,dn=(b[1]-a[1])*t,
+      h=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a[0]*t)*Math.cos(b[0]*t)*Math.sin(dn/2)*Math.sin(dn/2); return 2*R*Math.asin(Math.sqrt(h)); }
+    function label(d){ return (d<10 ? d.toFixed(1).replace(/\\.0$/,'') : Math.round(d))+' mi'; }
+    function later(k){ return (k.classList.contains('off') || k.classList.contains('tm') || k.classList.contains('px')) ? 100 : 0; }
+    function sortKids(parent, sel, rank){
+      var kids=[].slice.call(parent.querySelectorAll(sel)).filter(function(k){ return k.parentNode===parent; });
+      kids.sort(function(a,b){ return (rank[a.dataset.th]+later(a))-(rank[b.dataset.th]+later(b)); }).forEach(function(k){ parent.appendChild(k); });
+    }
+    function capText(){ if(!cap || cap.classList.contains('peek')) return;
+      cap.textContent=cap.textContent.split(' · ')[0]+(on?' · nearest first':''); }
+    window.__capText=capText;
+    function order(){
+      var o=on ? keys.slice().sort(function(a,b){ return dist[a]-dist[b]; }) : WEST, rank={};
+      o.forEach(function(k,i){ rank[k]=i; });
+      document.querySelectorAll('.card.now .body').forEach(function(b){ sortKids(b,'a.th',rank); });
+      document.querySelectorAll('.gcs').forEach(function(g){ sortKids(g,'[data-th]',rank); });
+      document.querySelectorAll('.gleg').forEach(function(g){
+        [].slice.call(g.children).sort(function(a,b){ return rank[a.dataset.th]-rank[b.dataset.th]; }).forEach(function(k){ g.appendChild(k); }); });
+      document.querySelectorAll('a.th').forEach(function(r){
+        var s=r.querySelector('.thn .dist'); if(!s){ s=el('span','dist'); var n=r.querySelector('.thn'); n.insertBefore(s, n.querySelector('i')); }
+        s.textContent=on ? label(dist[r.dataset.th]) : ''; if(on) r.dataset.dist=s.textContent; else delete r.dataset.dist;
+      });
+      B.classList.toggle('geoOn',on);
+      if(pin) pin.setAttribute('aria-pressed',on?'true':'false');
+      capText();
+      if(VIEW.layout) VIEW.layout(true);
+      window.__geoSort={on:on, order:o};   /* for checks */
+    }
+    window.__geoOrder=order;
+    function toast(t){ var d=el('div','gtoast',t); document.body.appendChild(d); setTimeout(function(){ d.remove(); },2600); }
+    function off(){ on=false; try{ localStorage.removeItem('geoOn'); }catch(e){} order(); }
+    function locate(quiet){
+      if(!navigator.geolocation) return;
+      if(pin) pin.classList.add('busy');
+      navigator.geolocation.getCurrentPosition(function(p){
+        if(pin) pin.classList.remove('busy');
+        var pos=[p.coords.latitude,p.coords.longitude]; keys.forEach(function(k){ dist[k]=mi(pos,GEO[k]); });
+        on=true; try{ localStorage.setItem('geoOn','1'); }catch(e){} order();
+      }, function(err){
+        if(pin) pin.classList.remove('busy');
+        off(); if(!quiet) toast(err && err.code===1 ? 'Location is blocked for this site' : 'Could not get your location');
+      }, {timeout:8000, maximumAge:600000});
+    }
+    if(pin) pin.addEventListener('click',function(){ if(on) off(); else locate(false); });
+    order();                                                    /* default: west -> east, nothing about distance */
+    var want=false; try{ want=localStorage.getItem('geoOn')==='1'; }catch(e){}
+    if(want) locate(true);                                      /* switched on earlier: refresh the position on this visit */
+  })();
+
   /* ---- views: Showtimes (cards) / Posters (posters + short list card) / List (one card, every movie) ---- */
   (function(){
     var mode=document.getElementById('mode'), cap=document.getElementById('modecap');
     if(!mode || !grid || !VIEW.layout) return;
-    var btns=[].slice.call(mode.querySelectorAll('button')), CAPS={cards:'Showtimes',posters:'Posters',list:'List'};
+    var btns=[].slice.call(mode.querySelectorAll('button[data-m]')), CAPS={cards:'Showtimes',posters:'Posters',list:'List'};
     var cards=VIEW.list.filter(function(c){ return !c.hidden; }), N=7, NP=5;   /* rows in the poster-view card: wide screens / phones */
     if(!cards.length){ mode.hidden=true; cap.hidden=true; return; }
-    var L={festival:'F',cinemark:'C',regal:'R',pickford:'M'};
+    var L={festival:'F',cinemark:'C',regal:'R',pickford:'M',laquinta:'L'};
     var sf=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
     function st(ts){ return sf.format(new Date(ts*1000)).replace(' AM','a').replace(' PM','p').replace(':00',''); }
     function legend(){ var g=el('div','gleg');
       THEATERS.forEach(function(x){ var s=el('span','gk'); s.dataset.th=x[0]; s.appendChild(el('b',null,L[x[0]])); s.appendChild(document.createTextNode(x[1])); g.appendChild(s); });
       return g; }
-    var THEATERS=[['festival','Festival'],['cinemark','Cinemark'],['regal','Regal'],['pickford','Pickford']];
+    var THEATERS=[['festival','Festival'],['pickford','Pickford'],['cinemark','Cinemark'],['regal','Regal'],['laquinta','La Quinta']];
     function row(c,xtra){
       var w=el('div','gw'+(xtra?' xtra':'')), ttl=c.querySelector('h3').textContent;
       var pim=c.querySelector(':scope > img');
@@ -1260,7 +1369,7 @@ JS = """
       var hint=el('div','gmore hint'); hint.appendChild(el('span',null,'+ '+(cards.length-NP)+' more · tap a poster below')); hint.appendChild(el('i',null,'↓'));
       box.appendChild(hint);
     }
-    VIEW.box=box;
+    VIEW.box=box; setTimeout(function(){ if(window.__geoOrder) window.__geoOrder(); },0);   /* lists exist now: apply the theater order to them too */
     /* list view: one card, every movie (two columns inside it on wide screens) */
     var lv=el('div','glist'); lv.appendChild(legend()); lv.appendChild(el('div','gsub',SUB));
     var lc=el('div','lcols'), half=Math.ceil(cards.length/2);
@@ -1272,7 +1381,7 @@ JS = """
     function apply(m,save){
       VIEW.mode=m; B.classList.toggle('pm',m==='posters'); B.classList.toggle('lm',m==='list');
       btns.forEach(function(b){ b.setAttribute('aria-pressed',String(b.dataset.m===m)); });
-      cap.textContent=CAPS[m];
+      cap.textContent=CAPS[m]; if(window.__capText) window.__capText();
       if(save){ try{ localStorage.setItem('view',m); }catch(e){} }
       if(m!=='list') VIEW.layout(true);
     }
@@ -1280,7 +1389,7 @@ JS = """
     /* mouse hover: the caption shows the name of the icon under the pointer */
     if(window.matchMedia && matchMedia('(hover: hover)').matches) btns.forEach(function(b){
       b.addEventListener('mouseenter',function(){ if(b.getAttribute('aria-pressed')!=='true'){ cap.textContent=CAPS[b.dataset.m]; cap.classList.add('peek'); } });
-      b.addEventListener('mouseleave',function(){ cap.textContent=CAPS[VIEW.mode]; cap.classList.remove('peek'); });
+      b.addEventListener('mouseleave',function(){ cap.textContent=CAPS[VIEW.mode]; cap.classList.remove('peek'); if(window.__capText) window.__capText(); });
     });
     var saved=null; try{ saved=localStorage.getItem('view'); }catch(e){}
     var h=location.hash.slice(1);
@@ -1331,8 +1440,8 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <meta name="theme-color" content="#111318">
 <link rel="preconnect" href="https://image.tmdb.org">
 <style>{CSS}</style></head>
-<body data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
-<header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
+<body data-geo='{json.dumps(THEATER_GEO)}' data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
+<header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button><button type="button" class="gpin" id="geo" aria-pressed="false" aria-label="Nearest theaters first" title="Nearest theaters first"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>
@@ -1477,7 +1586,9 @@ def mock_showings(now):
     out += [S("pickford", "Playing Now And Tomorrow", t(h)) for h in (-3, 0.5, 2.5)]
     out += [S("pickford", "Playing Now And Tomorrow", tm(17)), S("pickford", "Mixed Theaters", t(-1)),
             S("pickford", "Mixed Theaters", t(4)), S("pickford", "Starts Tomorrow", tm(20))]
-    for x in out[-6:-4] + out[-2:-1]:
+    out += [S("laquinta", "Playing Now And Tomorrow", t(h)) for h in (-2, 2)] + [S("laquinta", "Playing Now And Tomorrow", tm(18))]
+    out += [S("laquinta", "Mixed Theaters", t(0.75)), S("laquinta", "Starts Tomorrow", tm(21))]
+    for x in out[-11:-9] + out[-7:-6]:
         x["fmt"] = "D-BOX"
     out += [S("pickford", "The Metropolitan Opera: Carmen", t(h)) for h in (-1, 3)]
     for x in out:
@@ -1529,7 +1640,7 @@ def main():
         use_tmdb = True
         fetchers = {"festival": fetch_festival, "cinemark": fetch_cinemark,
                     "regal": lambda d: fetch_regal(d, official=(d == today)),
-                    "pickford": fetch_pickford, "dplace": fetch_dplace}
+                    "pickford": fetch_pickford, "laquinta": fetch_laquinta, "dplace": fetch_dplace}
 
         def job(kd):
             key, day = kd
