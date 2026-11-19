@@ -499,8 +499,17 @@ def apply_dplace(results, dp, dp_err, days, problems):
             b = Counter(ts.strftime("%H:%M") for _, ts in theirs if ts >= ahead)
             diff = sum(((a - b) + (b - a)).values())
             if diff > max(4, 0.2 * max(sum(a.values()), sum(b.values()))):
+                # say exactly which showings differ, so one look at the log shows which source is wrong
+                names = {}
+                for s in got:
+                    names.setdefault(s["ts"].strftime("%H:%M"), s["title"])
+                for t, ts in theirs:
+                    names.setdefault(ts.strftime("%H:%M"), t)
+                only_bs = ", ".join(f"{k} {names.get(k, '?')}" for k in sorted((a - b).elements()))
+                only_dp = ", ".join(f"{k} {names.get(k, '?')}" for k in sorted((b - a).elements()))
                 problems.append(f"Mary Pickford Theatre: BigScreen ({sum(a.values())}) and the D'Place site "
-                                f"({sum(b.values())}) disagree on {diff} showtimes for {day} - check which one is right")
+                                f"({sum(b.values())}) disagree on {diff} showtimes for {day} - check which one is right. "
+                                f"Only on BigScreen: {only_bs or 'none'}. Only on D'Place: {only_dp or 'none'}")
 
 
 # ------------------------------------------------------------------------ TMDB
