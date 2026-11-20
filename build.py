@@ -910,7 +910,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
    so the button never looks attached to the last time chip */
 .sig-label .th .thn{padding-bottom:4px}
 .sig-label .th .thn i{margin-right:-1px}
-.sig-label .th .thn i::after{width:15px;height:15px;background-color:rgba(0,0,0,.10)}
+.sig-label .th .thn i::after{width:15px;height:15px;background-color:rgba(0,0,0,var(--sca,.06))}  /* light mode: the same translucent gray, softer (was .10); on white it matches the Posters pill */
 @media (prefers-color-scheme:dark){.sig-label .th .thn i::after{background-color:rgba(255,255,255,.13)}}
 /* sizes are variables so they can be tuned: --sc = circle, --sa = arrow */
 .sig-label .th .thn i::after{width:var(--sc,20px);height:var(--sc,20px);background-size:var(--sa,16px) var(--sa,16px)}
