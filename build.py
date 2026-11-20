@@ -912,6 +912,12 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sig-label .th .thn i{margin-right:-1px}
 .sig-label .th .thn i::after{width:15px;height:15px;background-color:rgba(0,0,0,.10)}
 @media (prefers-color-scheme:dark){.sig-label .th .thn i::after{background-color:rgba(255,255,255,.13)}}
+/* sizes are variables so they can be tuned: --sc = circle, --sa = arrow */
+.sig-label .th .thn i::after{width:var(--sc,20px);height:var(--sc,20px);background-size:var(--sa,16px) var(--sa,16px)}
+/* the dot and the name sit on the same horizontal line as the circle: shift them down by half the extra height (a 15px line vs the circle); all three are centred on the same line, whatever the font */
+.sig-label .th .thn{--d:max(0px,calc((var(--sc,20px) - 15px)/2))}
+.sig-label .th .thn .full,.sig-label .th .thn .short{padding-top:var(--d)}
+.sig-label .th .thn::before{margin:calc(3.5px + var(--d)) 2px 0 0}  /* dot centred on the first line (15px line, 8px dot); 6px gap + 2px = 8px to the name */
 /* the line under "Now playing" (until the first tap) */
 .taphint{margin:-6px 0 10px;font-size:.82rem;color:var(--mut)}
 #sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -1021,9 +1027,9 @@ body.pm .card.now .th,body.pm .card.now .status{display:none}
   border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 body.pm .card.tonly .plab2{display:block}
 /* poster view: a plain pill (same look as the view switcher at the top) in the bottom right of the caption, holding a chevron.
-   The caption's bottom gap is trimmed so it matches the top. Sizes come from --pw/--ph/--ps/--pr/--pb/--pd (defaults here; --pd = corner radius, 12px like the card). */
-body.pm .card.now .meta{margin-bottom:0}
-body.pm .card.now::after{content:"";position:absolute;right:var(--pr,7px);bottom:var(--pb,6px);width:var(--pw,24px);height:var(--ph,24px);border-radius:var(--pd,12px);pointer-events:none;z-index:1;
+   The caption's bottom gap is trimmed so it matches the top; more room above the rating row keeps a wrapped title off the pill. Sizes come from --pw/--ph/--ps/--pr/--pb/--pd (defaults here; --pd = corner radius, 12px like the card). */
+body.pm .card.now .meta{margin:10px 0 0}
+body.pm .card.now::after{content:"";position:absolute;right:var(--pr,7px);bottom:var(--pb,7px);width:var(--pw,22px);height:var(--ph,22px);border-radius:var(--pd,11px);pointer-events:none;z-index:1;
   background:var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2314161c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E") center/var(--ps,16px) var(--ps,16px) no-repeat}
 @media (prefers-color-scheme:dark){body.pm .card.now::after{
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E")}}
