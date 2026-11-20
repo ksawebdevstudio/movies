@@ -64,6 +64,8 @@ THEATER_GEO = {   # theater addresses, rounded to 4 decimals (about 30 ft); dist
     "laquinta": (33.7089, -116.2927),   # 46800 Washington St, La Quinta
 }
 THEATER_NAMES = dict(THEATERS)
+THEATER_SLUG = {"festival": "festival-theaters", "pickford": "mary-pickford", "cinemark": "cinemark-rancho-mirage",
+                "regal": "regal-rancho-mirage", "laquinta": "cinemark-la-quinta"}   # page address /movies/<slug>/
 SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal", "pickford": "Mary Pickford", "laquinta": "La Quinta"}  # used on phones
 # Where the "open showtimes" link goes when a theater could not be read.
 THEATER_URLS = {
@@ -927,7 +929,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .tinfo{background:var(--tb);border-radius:10px;padding:10px 12px;color:var(--fg);font-size:.85rem}
 .tinfo b{display:flex;align-items:center;gap:7px}
 .tinfo b::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--tc);flex:none}
-.tinfo a{color:var(--fg)} .tinfo .addr{color:var(--mut);display:block;margin:3px 0 6px;font-size:.8rem}
+.tinfo a{color:var(--fg)} .tinfo .tpage{display:block;margin-top:4px;font-weight:700} .tinfo .addr{color:var(--mut);display:block;margin:3px 0 6px;font-size:.8rem}
 .foot{font-size:.78rem;line-height:1.5} .foot p{margin:6px 0}
 /* author credit at the end of the page */
 .credit{text-align:center;margin:26px 0 6px}
@@ -1539,7 +1541,94 @@ def sitemap_xml(today):
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             f'<url><loc>{SITE_URL}</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>\n'
-            '</urlset>\n')
+            + "".join(f'<url><loc>{SITE_URL}{THEATER_SLUG[k]}/</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>\n'
+                      for k, _ in THEATERS)
+            + '</urlset>\n')
+
+
+def theater_page(key, movies, today, tomorrow, tmrw_ok):
+    """Static, crawlable page for one theater: today's (and tomorrow's) showtimes as plain text, address, links."""
+    name, addr = dict(THEATERS)[key], THEATER_ADDR[key]
+    city = addr.rsplit(",", 1)[-1].strip()
+    a = html.escape
+    nice_today = datetime.strptime(today, "%Y-%m-%d").strftime("%A, %b %-d")
+    nice_tmrw = datetime.strptime(tomorrow, "%Y-%m-%d").strftime("%A, %b %-d")
+    updated = datetime.now(TZ).strftime("%b %-d, %-I:%M %p %Z")
+
+    def block(day):
+        out, titles = "", []
+        for g in movies:
+            shows = g["by_theater"].get(key) or {}
+            items = sorted((ts, fmt) for (ts, fmt) in shows if ts.strftime("%Y-%m-%d") == day)
+            if not items:
+                continue
+            titles.append(g["title"])
+            chips = ""
+            for ts, fmt in items:
+                tag = f"<b>{a(fmt)}</b> " if fmt else ""
+                cls = {"IMAX": "t imax", "D-BOX": "t fmt"}.get(fmt, "t")
+                buy = g["buy"].get((key, ts, fmt))
+                href = buy or shows[(ts, fmt)]
+                chips += (f'<a class="{cls}" data-ts="{int(ts.timestamp())}" href="{a(href)}" target="_blank" '
+                          f'rel="noopener">{tag}{fmt_time(ts)}</a>')
+            out += f'<div class="trow"><div class="ttl">{a(g["title"])}</div><div class="times">{chips}</div></div>'
+        return out, titles
+
+    today_html, today_titles = block(today)
+    tmrw_html, _ = block(tomorrow) if key in tmrw_ok else ("", [])
+    if not today_html:
+        today_html = ('<p class="empty">No showtimes are listed for today. Please check the theater&rsquo;s own '
+                      f'site: <a href="{a(THEATER_URLS[key])}" target="_blank" rel="noopener">{a(name)} &#8599;</a></p>')
+    title = f"{name} Showtimes Today - {city}"
+    desc = f"Showtimes today at {name} in {city}, CA ({addr})."
+    if today_titles:
+        desc += " Now showing: " + ", ".join(today_titles[:4]) + (" and more." if len(today_titles) > 4 else ".")
+    canon = f"{SITE_URL}{THEATER_SLUG[key]}/"
+    lat, lon = THEATER_GEO[key]
+    ld = {"@context": "https://schema.org", "@type": "MovieTheater", "name": name, "url": canon,
+          "address": addr + ", CA", "sameAs": THEATER_URLS[key],
+          "geo": {"@type": "GeoCoordinates", "latitude": lat, "longitude": lon}}
+    ld_json = json.dumps(ld, ensure_ascii=False).replace("</", "<\\/")
+    gc = (f'<script data-goatcounter="https://{GOATCOUNTER_CODE}.goatcounter.com/count" async '
+          f'src="//gc.zgo.at/count.js"></script>\n') if GOATCOUNTER_CODE else ""
+    others = "".join(f'<a href="../{THEATER_SLUG[k]}/">{a(n)} &rsaquo;</a>' for k, n in THEATERS if k != key)
+    maps = "https://maps.google.com/?q=" + urllib.parse.quote_plus(name + ", " + addr)
+    tm = (f'<h2>Tomorrow <span class="sub">&middot; {nice_tmrw}</span></h2><div class="tlist d1">{tmrw_html}</div>'
+          if tmrw_html else "")
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{a(title)}</title>
+<meta name="description" content="{a(desc)}">
+<link rel="canonical" href="{canon}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="In Theaters - Coachella Valley">
+<meta property="og:title" content="{a(title)}"><meta property="og:description" content="{a(desc)}"><meta property="og:url" content="{canon}">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{ld_json}</script>
+<link rel="icon" type="image/png" sizes="32x32" href="../icon-32.png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<meta name="theme-color" content="#111318">
+<style>{CSS}
+.tp{{max-width:640px;margin:0 auto}} .tp .addr2{{display:block;text-align:center;color:var(--mut);margin-top:4px}}
+.tp .btns{{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:14px 0 4px}}
+.tp .btns a{{padding:8px 13px;border-radius:10px;background:var(--chip);color:var(--fg);text-decoration:none;font-size:.85rem}}
+.tp .trow{{padding:12px 0;border-top:1px solid var(--line)}} .tp .ttl{{font-weight:700}}
+.tp .tlist .t{{--tc:var(--cline);font-size:.85rem;padding:5px 10px}}
+.tp .others a{{display:block;padding:9px 0;color:var(--fg);text-decoration:none;border-top:1px solid var(--line)}}
+.tp .note{{color:var(--mut);font-size:.8rem;margin-top:22px}} .tp .empty{{color:var(--mut)}}
+</style></head>
+<body data-th="{key}">
+<header><h1>{a(name)}</h1><div class="sub">Showtimes today, {nice_today} &middot; updated {updated}</div></header>
+<main class="tp">
+<span class="addr2">{a(addr)}, CA</span>
+<div class="btns"><a href="{a(maps)}" target="_blank" rel="noopener">Open in Maps</a><a href="{a(THEATER_URLS[key])}" target="_blank" rel="noopener">Theater website &#8599;</a><a href="../">&larr; All theaters</a></div>
+<h2>Today <span class="sub">&middot; {nice_today}</span></h2><div class="tlist">{today_html}</div>
+{tm}
+<h2>Other theaters</h2><div class="others">{others}</div>
+<p class="note">Showtimes are collected automatically from the theater&rsquo;s website and can change or be incomplete. Please confirm on the theater&rsquo;s site before you go. Last updated {updated}.</p>
+</main>
+{gc}<script>document.querySelectorAll(".t[data-ts]").forEach(function(e){{if(+e.dataset.ts*1000<Date.now())e.classList.add("past")}})</script>
+</body></html>"""
 
 
 def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
@@ -1561,7 +1650,8 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
         f'<div class="tinfo" data-th="{k}"><b>{html.escape(n)}</b>'
         f'<a class="addr" href="https://maps.google.com/?q={urllib.parse.quote_plus(n + ", " + THEATER_ADDR[k])}" '
         f'target="_blank" rel="noopener">{html.escape(THEATER_ADDR[k])}</a>'
-        f'<a href="{html.escape(THEATER_URLS[k])}" target="_blank" rel="noopener">All showtimes &#8599;</a></div>'
+        f'<a href="{html.escape(THEATER_URLS[k])}" target="_blank" rel="noopener">All showtimes &#8599;</a>'
+        f'<a class="tpage" href="{THEATER_SLUG[k]}/">Showtimes today &rsaquo;</a></div>'
         for k, n in THEATERS)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -1836,6 +1926,11 @@ def main():
         f.write(render(movies, soon, today, warnings, tomorrow, tmrw_ok))
     with open(os.path.join(os.path.dirname(OUT), "sitemap.xml"), "w", encoding="utf-8") as f:
         f.write(sitemap_xml(today))
+    for k, _ in THEATERS:
+        d = os.path.join(os.path.dirname(OUT), THEATER_SLUG[k])
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+            f.write(theater_page(k, movies, today, tomorrow, tmrw_ok))
     if GSC_VERIFY_FILE:
         with open(os.path.join(os.path.dirname(OUT), GSC_VERIFY_FILE), "w", encoding="utf-8") as f:
             f.write(f"google-site-verification: {GSC_VERIFY_FILE}")
