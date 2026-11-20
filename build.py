@@ -1062,8 +1062,9 @@ img.gi{object-fit:cover;padding:0;display:block}
 .gmore i{margin-left:auto;font-style:normal}
 .gmore.btn{cursor:pointer;color:var(--fg);font-weight:600;background:none;border-left:0;border-right:0;border-bottom:0;width:100%;font-family:inherit;text-align:left}
 .gcard.narrow .gmore.btn,.gcard:not(.narrow) .gmore.hint{display:none}
-.lcols{display:grid;grid-template-columns:1fr;gap:0 28px}
-@media (min-width:732px){.lcols{grid-template-columns:1fr 1fr}}
+.lcols{column-gap:28px}
+.lcols .gw{break-inside:avoid}
+@media (min-width:732px){.lcols{column-count:2}}   /* two columns balanced by height (rows differ: 1-2 lines of theaters), same reading order */
 
 /* nearest-first toggle: a pin in the view switcher; off by default, a soft yellow tint when on */
 .mode{grid-auto-columns:auto}
@@ -1487,8 +1488,8 @@ JS = """
     VIEW.box=box; setTimeout(function(){ if(window.__geoOrder) window.__geoOrder(); },0);   /* lists exist now: apply the theater order to them too */
     /* list view: one card, every movie (two columns inside it on wide screens) */
     var lv=el('div','glist'); lv.appendChild(legend()); lv.appendChild(el('div','gsub',SUB));
-    var lc=el('div','lcols'), half=Math.ceil(cards.length/2);
-    [cards.slice(0,half),cards.slice(half)].forEach(function(part){ var col=el('div'); part.forEach(function(c){ col.appendChild(row(c,false)); }); lc.appendChild(col); });
+    var lc=el('div','lcols');
+    cards.forEach(function(c){ lc.appendChild(row(c,false)); });
     lv.appendChild(lc); grid.parentNode.insertBefore(lv,grid);
 
     var timers=[];
