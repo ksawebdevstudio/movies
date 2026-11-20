@@ -890,6 +890,30 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .card.now{cursor:pointer;transition:border-color .12s}
 .card.now:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .card.now:hover{border-color:var(--mut)}
+/* tap hint: until a card is opened, a wave runs over the theater blocks on screen (left to right) or over the movie rows (first to last): each one
+   comes alive for a moment - richer and brighter color, slightly bigger, a tiny lift - and settles back */
+@media (prefers-reduced-motion:no-preference){
+  .th.nudge{animation:nudge var(--nt,.9s) ease-in-out var(--nd,0s) both}
+  .gw.nudge{animation:nudgew var(--nt,.9s) ease-in-out var(--nd,0s) both}
+  @keyframes nudge{
+    0%,100%{transform:translateY(0) scale(1);filter:saturate(1) brightness(1)}
+    30%,60%{transform:translateY(calc(var(--nl,0)*-1px)) scale(var(--ns,1.05));filter:saturate(var(--nsa,1.8)) brightness(var(--nb,1.06))}}
+  @keyframes nudgew{30%,60%{background-color:color-mix(in srgb,var(--acc) 16%,transparent);transform:translateY(calc(var(--nl,0)*-1px)) scale(calc(1 + (var(--ns,1.05) - 1)*.4));filter:saturate(var(--nsa,1.8)) brightness(var(--nb,1.06))}}}
+/* permanent "this is tappable" signs on a theater block: sig-arrow = a bolder accent arrow, sig-label = a small round chevron button */
+.sig-arrow .th .thn i{color:var(--acc);font-weight:800;font-size:1rem;line-height:1}
+.sig-label .th .thn i{font-size:0;line-height:0;margin-left:auto;align-self:flex-start;flex:none}
+.sig-label .th .thn i::after{content:"";display:block;width:16px;height:16px;border-radius:50%;
+  background:rgba(0,0,0,.12) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2314161c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E") center/100% 100% no-repeat}
+@media (prefers-color-scheme:dark){.sig-label .th .thn i::after{background-color:rgba(255,255,255,.16);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E")}}
+/* space between the theater name row and the first row of times, and a slightly smaller, lighter round button,
+   so the button never looks attached to the last time chip */
+.sig-label .th .thn{padding-bottom:4px}
+.sig-label .th .thn i{margin-right:-1px}
+.sig-label .th .thn i::after{width:15px;height:15px;background-color:rgba(0,0,0,.10)}
+@media (prefers-color-scheme:dark){.sig-label .th .thn i::after{background-color:rgba(255,255,255,.13)}}
+/* the line under "Now playing" (until the first tap) */
+.taphint{margin:-6px 0 10px;font-size:.82rem;color:var(--mut)}
 #sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
 .sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px)}
 .sheet-box{position:relative;width:100%;max-width:520px;max-height:86vh;overflow:hidden;display:flex;flex-direction:column;background:var(--card);
@@ -1497,6 +1521,89 @@ JS = """
       timers.push(setTimeout(stopTour,1500+seq.length*600));
     }
   })();
+
+  /* tap hint, until the visitor opens a card (popup, theater or ticket link): a short line under "Now playing" and a wave
+     of light. Every view (Showtimes / Posters / List) has its own timer and its own state:
+       Showtimes: a wave over the theater blocks on screen (left to right), the first one after a short start delay, then
+                  more with growing pauses (15 s, 20 s, 25 s; the 2nd visit stops after 20 s) so it never turns into a pattern;
+       Posters / List: one wave over the movie rows, first to last, 80 ms apart (once per view).
+     Waves wait for something to show (blocks below the fold, scrolling, popup open) and look again every 1.5 s.
+     Waves: 1st visit 4 in Showtimes, 2nd visit 3, then none; the first click ends them for good.
+     The line under the title disappears with the first click.
+     window.__hintCfg (preview only) overrides: start, pauses [s], speed, str, bri, sat, flow (ms), step (ms), lift, line, wave */
+  (function(){
+    var T=window.__hintCfg, cfg=T||{speed:.7,str:1.025,bri:1.06,sat:1,flow:600,step:80,lift:0,start:5,line:true,wave:true};
+    var calm=window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var visit=1, off=false;     /* waves: 1st visit 4 in Showtimes, 2nd visit 3, then none; a click ends them for good */
+    if(!T) try{
+      if(localStorage.getItem('tapHint')==='1') off=true;
+      else { var n=+localStorage.getItem('tapHintN')||0; if(n>=2) off=true; else { visit=n+1; localStorage.setItem('tapHintN',String(n+1)); } }
+    }catch(e){}
+    var sheet=document.getElementById('sheet'), line=document.getElementById('taphint'), B=document.body, lastScroll=0, timer=null, cur='', modes={}, gone=false;
+    if(!off && window.__ev) __ev('hint/shown','Tap hint shown',true);
+    function modeKey(){ return B.classList.contains('lm')?'list':B.classList.contains('pm')?'posters':'cards'; }
+    function state(k){ return modes[k]||(modes[k]={waves:0,done:false}); }
+    function lineText(){ return modeKey()!=='cards' ? 'Tap a movie to see showtimes and buy tickets' : 'Tap a showtime to buy tickets'; }
+    function showLine(on){ if(line){ line.hidden=!on; if(on) line.textContent=lineText(); } }
+    function clear(){ [].forEach.call(document.querySelectorAll('.nudge'),function(x){ x.classList.remove('nudge'); }); }
+    function understood(){ if(T) return; try{ localStorage.setItem('tapHint','1'); }catch(e){} clearTimeout(timer); timer=null; for(var k in modes) modes[k].done=true; gone=true; clear(); showLine(false); }
+    function blocks(){
+      var vh=window.innerHeight, vw=window.innerWidth, out=[];
+      [].forEach.call(document.querySelectorAll('.card.now a.th, .gw'),function(e){
+        if(e.offsetParent===null) return;
+        var r=e.getBoundingClientRect(), cy=r.top+r.height/2;
+        if(r.height>0 && cy>60 && cy<vh-60 && r.right>0 && r.left<vw) out.push([e,r,cy]);
+      });
+      return out;
+    }
+    function wave(){
+      var c=blocks(); if(!c.length) return 0;
+      var k=cfg.speed||1, fl=cfg.flow==null?600:cfg.flow, step=cfg.step==null?80:cfg.step;
+      var th=c.filter(function(x){ return !x[0].classList.contains('gw'); }), rows=c.filter(function(x){ return x[0].classList.contains('gw'); });
+      clear();
+      function go(x,d){
+        var st=x[0].style;
+        st.setProperty('--nd',Math.round(d)+'ms'); st.setProperty('--nt',Math.round(900/k)+'ms'); st.setProperty('--ns',String(cfg.str||1.025));
+        st.setProperty('--nsa',String(cfg.sat||1)); st.setProperty('--nb',String(cfg.bri||1.06)); st.setProperty('--nl',String(cfg.lift==null?0:cfg.lift));
+        void x[0].offsetWidth; x[0].classList.add('nudge');
+      }
+      /* theater blocks: left to right first (each movie card starts a little after its left neighbour), then top to bottom inside the card */
+      if(th.length){
+        var xl=Infinity, xr=-Infinity, top=Infinity, bot=-Infinity;
+        th.forEach(function(x){ var cx=x[1].left+x[1].width/2; x.push(cx); xl=Math.min(xl,cx); xr=Math.max(xr,cx); top=Math.min(top,x[2]); bot=Math.max(bot,x[2]); });
+        var sx=Math.max(1,xr-xl), sy=Math.max(1,bot-top);
+        th.forEach(function(x){ go(x,((x[3]-xl)/sx*fl + (x[2]-top)/sy*350)/k); });
+      }
+      /* movie rows: strictly one after another, first to last (page order) */
+      rows.forEach(function(x,i){ go(x,i*step/k); });
+      return c.length;
+    }
+    function pauses(){ return cfg.pauses||(visit===1?[15,20,25]:[15,20]); }
+    function tick(){
+      timer=null;
+      var m=state(cur), ok=false;
+      if(!(cfg.wave===false || document.hidden || (sheet && !sheet.hidden) || Date.now()-lastScroll<800)) ok=wave()>0;
+      if(ok) m.waves++;
+      if(cur!=='cards'){ if(ok){ m.done=true; return; } }                       /* Posters / List: one wave */
+      else if(ok && m.waves>pauses().length){ m.done=true; setTimeout(clear,2200); return; }   /* Showtimes: first wave + one per pause */
+      /* next wave after the pause that follows this one; nothing to show yet: look again in 1.5 s */
+      timer=setTimeout(tick, ok ? pauses()[m.waves-1]*1000 : 1500);
+    }
+    function startView(first){
+      clearTimeout(timer); timer=null; clear();
+      cur=modeKey(); var m=state(cur); showLine(!off && !gone && cfg.line!==false);
+      if(m.done || calm || off) return;
+      var wait = first ? (cfg.start==null?5:cfg.start) : (m.waves ? pauses()[Math.min(m.waves,pauses().length)-1] : 2.5);
+      timer=setTimeout(tick, wait*1000);
+    }
+    if(T){ T.now=function(){ wave(); }; T.line=function(on){ showLine(on); }; }
+    if(window.MutationObserver) new MutationObserver(function(){ if(modeKey()!==cur) startView(false); else if(line && !line.hidden) line.textContent=lineText(); }).observe(B,{attributes:true,attributeFilter:['class']});
+    if(off){ showLine(false); return; }
+    document.addEventListener('click',function(e){ if(e.target.closest && e.target.closest('.card.now, .gw, #sheet')) understood(); },true);
+    window.addEventListener('scroll',function(){ lastScroll=Date.now(); },{passive:true});
+    document.addEventListener('animationend',function(e){ if(String(e.animationName).indexOf('nudge')===0) e.target.classList.remove('nudge'); });
+    startView(true);
+  })();
 })();
 """
 
@@ -1665,12 +1772,13 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <meta name="theme-color" content="#111318">
 <link rel="preconnect" href="https://image.tmdb.org">
 <style>{CSS}</style></head>
-<body data-geo='{json.dumps(THEATER_GEO)}' data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
+<body class="sig-label" data-geo='{json.dumps(THEATER_GEO)}' data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
 <header><h1>In Theaters</h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button><button type="button" class="gpin" id="geo" aria-pressed="false" aria-label="Nearest theaters first" title="Nearest theaters first"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>
 <h2>Now playing <span class="sub">&middot; still showing today first, then by rating</span></h2>
+<p class="taphint" id="taphint" hidden></p>
 <p class="empty" id="none" hidden>Nothing scheduled.</p>
 <section class="grid" id="nowgrid">
 {now_html}
