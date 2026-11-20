@@ -100,6 +100,9 @@ DPLACE_BASE = "https://www.dplaceentertainment.com"
 # Visit statistics (GoatCounter: no cookies, no personal data). Put the site code here (the part before
 # ".goatcounter.com"). While it is empty the page has no statistics script and sends nothing anywhere.
 GOATCOUNTER_CODE = "geniusgorilla"
+SITE_URL = "https://ksawebdevstudio.github.io/movies/"   # canonical address of the page
+GSC_VERIFY = ""    # Google Search Console "HTML tag" token (content value only); empty = no tag
+BING_VERIFY = ""   # Bing Webmaster Tools msvalidate.01 token; empty = no tag
 DPLACE_THEATRE_ID = "0000000673"
 # D'Place answered GitHub's server with "405 Not Allowed" while the default Accept header was sent;
 # these are the ordinary headers of a page request (same honest User-Agent).
@@ -1495,6 +1498,49 @@ JS = """
 """
 
 
+def seo_head(today):
+    """Title/description/canonical/social tags + JSON-LD list of theaters. Counts and names come from THEATERS."""
+    cities = []
+    for k, _ in THEATERS:
+        c = THEATER_ADDR[k].rsplit(",", 1)[-1].strip()
+        if c not in cities:
+            cities.append(c)
+    city_txt = ", ".join(cities[:-1]) + " and " + cities[-1] if len(cities) > 1 else cities[0]
+    title = "Movie Showtimes Today - Palm Springs & Coachella Valley"
+    desc = (f"Today's movie showtimes at {len(THEATERS)} theaters in {city_txt}. "
+            "Updated several times a day, with ratings and what's coming soon.")
+    a = html.escape
+    ld = {"@context": "https://schema.org", "@graph": [
+        {"@type": "WebSite", "name": "In Theaters - Coachella Valley", "url": SITE_URL},
+        {"@type": "ItemList", "name": "Movie theaters in the Coachella Valley", "itemListElement": [
+            {"@type": "ListItem", "position": i, "item": {
+                "@type": "MovieTheater", "name": n, "address": THEATER_ADDR[k] + ", CA", "url": THEATER_URLS[k]}}
+            for i, (k, n) in enumerate(THEATERS, 1)]}]}
+    ld_json = json.dumps(ld, ensure_ascii=False).replace("</", "<\\/")
+    verify = ""
+    if GSC_VERIFY:
+        verify += f'<meta name="google-site-verification" content="{a(GSC_VERIFY)}">\n'
+    if BING_VERIFY:
+        verify += f'<meta name="msvalidate.01" content="{a(BING_VERIFY)}">\n'
+    return (f'<title>{a(title)}</title>\n'
+            f'<meta name="description" content="{a(desc)}">\n'
+            f'<link rel="canonical" href="{SITE_URL}">\n'
+            f'<meta property="og:type" content="website">\n'
+            f'<meta property="og:site_name" content="In Theaters - Coachella Valley">\n'
+            f'<meta property="og:title" content="{a(title)}">\n'
+            f'<meta property="og:description" content="{a(desc)}">\n'
+            f'<meta property="og:url" content="{SITE_URL}">\n'
+            f'<meta name="twitter:card" content="summary">\n'
+            f'{verify}<script type="application/ld+json">{ld_json}</script>')
+
+
+def sitemap_xml(today):
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            f'<url><loc>{SITE_URL}</loc><lastmod>{today}</lastmod><changefreq>daily</changefreq></url>\n'
+            '</urlset>\n')
+
+
 def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
     gc_tag = (f'<script data-goatcounter="https://{GOATCOUNTER_CODE}.goatcounter.com/count" async '
               f'src="//gc.zgo.at/count.js"></script>\n') if GOATCOUNTER_CODE else ""
@@ -1519,7 +1565,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>In Theaters - Coachella Valley</title>
+{seo_head(today)}
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -1787,6 +1833,8 @@ def main():
     write_icons(os.path.dirname(OUT))
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(render(movies, soon, today, warnings, tomorrow, tmrw_ok))
+    with open(os.path.join(os.path.dirname(OUT), "sitemap.xml"), "w", encoding="utf-8") as f:
+        f.write(sitemap_xml(today))
     print(f"OK: {len(movies)} movies, {len(soon)} upcoming -> {OUT} ({time.time() - started:.1f}s)")
 
 
