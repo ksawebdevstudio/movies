@@ -1020,6 +1020,13 @@ body.pm .card.now .th,body.pm .card.now .status{display:none}
 .plab2{display:none;position:absolute;right:8px;bottom:8px;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
   border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 body.pm .card.tonly .plab2{display:block}
+/* poster view: a plain pill (same look as the view switcher at the top) in the bottom right of the caption, holding a chevron.
+   The caption's bottom gap is trimmed so it matches the top. Sizes come from --pw/--ph/--ps/--pr/--pb/--pd (defaults here; --pd = corner radius, 12px like the card). */
+body.pm .card.now .meta{margin-bottom:0}
+body.pm .card.now::after{content:"";position:absolute;right:var(--pr,7px);bottom:var(--pb,6px);width:var(--pw,24px);height:var(--ph,24px);border-radius:var(--pd,12px);pointer-events:none;z-index:1;
+  background:var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2314161c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E") center/var(--ps,16px) var(--ps,16px) no-repeat}
+@media (prefers-color-scheme:dark){body.pm .card.now::after{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E")}}
 /* list view: one card with every movie instead of the posters */
 body.lm #nowgrid{display:none}
 .gcard,.glist{display:none;background:var(--card);border:1px solid var(--cline);border-radius:12px;
