@@ -901,7 +901,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .soon .body{padding:8px 10px 10px}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .plab{position:absolute;top:8px;left:8px;z-index:1;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
-  border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  border-radius:999px;background:rgba(20,22,28,.62);color:#fff;-webkit-backdrop-filter:blur(8px) saturate(1.3);backdrop-filter:blur(8px) saturate(1.3);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 1px 4px rgba(0,0,0,.3)}  /* glass pill: the light hairline keeps the edge visible on dark posters */
 .plab i{font-style:normal;font-weight:500;opacity:.8}
 .badge{position:absolute;top:8px;left:8px;background:#f5b301;color:#111;font-weight:700;font-size:.78rem;padding:3px 9px;border-radius:999px}
 .fallback{max-width:1068px;margin:8px auto;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;text-decoration:none;color:var(--fg)}
@@ -1045,7 +1046,8 @@ footer h2{color:var(--fg)}
 body.pm .card.now .th,body.pm .card.now .status{display:none}
 .pbox{position:absolute;left:0;right:0;top:0;aspect-ratio:2/3;pointer-events:none}
 .plab2{display:none;position:absolute;right:8px;bottom:8px;font-size:.7rem;font-weight:700;letter-spacing:.02em;padding:3px 8px;
-  border-radius:999px;background:rgba(20,22,28,.78);color:#fff;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+  border-radius:999px;background:rgba(20,22,28,.62);color:#fff;-webkit-backdrop-filter:blur(8px) saturate(1.3);backdrop-filter:blur(8px) saturate(1.3);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.24),0 1px 4px rgba(0,0,0,.3)}
 body.pm .card.tonly .plab2{display:block}
 /* poster view: a plain pill (same look as the view switcher at the top) in the bottom right of the caption, holding a chevron.
    The caption's bottom gap is trimmed so it matches the top; more room above the rating row keeps a wrapped title off the pill. Sizes come from --pw/--ph/--ps/--pr/--pb/--pd (defaults here; --pd = corner radius, 12px like the card). */
