@@ -13,6 +13,7 @@ import base64
 import gzip
 import html
 import json
+import math
 import os
 import re
 import sys
@@ -636,13 +637,31 @@ def tmdb_by_title(title, year=None):
 FEW_VOTES = 100   # below this a rating is shown dimmed and counts less in the sort
 
 
+REACH_W = 1.25   # how many rating points the most widely shown title earns on top of its quality score
+
+
+def sessions_of(g):
+    """Showtimes of a title over the days that were loaded (today + tomorrow), across all theaters."""
+    return sum(len(v) for v in g["by_theater"].values())
+
+
+def set_reach(movies):
+    """Reach (0..1): how widely the title is shown, on a log scale relative to the busiest title of the day, so the
+    scale follows weekdays, weekends and holidays by itself and a film fades as theaters cut its showtimes.
+    Events and re-releases get none (they are one-off screenings by nature)."""
+    top = max([sessions_of(g) for g in movies if not g["label"]] or [1])
+    for g in movies:
+        n = sessions_of(g)
+        g["reach"] = 0.0 if g["label"] or top < 2 else min(1.0, math.log(max(n, 1)) / math.log(top))
+
+
 def sort_key(g):
-    """Best rated first, but a rating built on few votes is pulled toward an average,
-    so '8.8 from 14 votes' does not outrank '8.5 from 900 votes'. The card shows the
-    vote count so the order is explainable. Unrated titles go last, most popular first."""
+    """Quality plus reach. Quality: best rated first, but a rating built on few votes is pulled toward an average,
+    so '8.8 from 14 votes' does not outrank '8.5 from 900 votes'. Reach: a title shown all over town and all day
+    ranks above a slightly better rated one shown once (see set_reach). Unrated titles go last, most popular first."""
     v, r = g["votes"], g["rating"]
     if v >= 10 and r > 0:
-        return (0, -((v * r + 50 * 6.5) / (v + 50)), g["title"])
+        return (0, -((v * r + 50 * 6.5) / (v + 50) + REACH_W * g.get("reach", 0.0)), g["title"])
     return (1 if g["tmdb_id"] else 2, -g["pop"], g["title"])
 
 
@@ -731,6 +750,7 @@ def build_movies(showings, use_tmdb):
         if not g["poster"]:
             g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford", "laquinta")
                                 if k in g["alt_posters"]), None)
+    set_reach(movies)
     movies.sort(key=sort_key)
     return movies
 
