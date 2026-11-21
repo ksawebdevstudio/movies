@@ -1091,7 +1091,7 @@ body.pm .gcard,body.lm .glist{display:block}
 .gw.tap .gi{background:rgba(0,0,0,.10);color:#15171c;border-color:transparent}
 .gw.tap .gk{color:#15171c} .gw.tap .gk b{background:rgba(255,255,255,.75);color:color-mix(in srgb,var(--tc) 45%,#15171c)}
 .card.now{-webkit-tap-highlight-color:transparent}
-.card.now.tap{transform:scale(.97);transition:transform .05s}
+.card.now.tap{transform:scale(var(--tsx,.97),var(--tsy,.97));transition:transform .05s}   /* --tsx/--tsy are set in JS so the press shrinks every card by the same few pixels, tall or short */
 .gw:hover .gn{text-decoration:underline;text-underline-offset:3px}
 .gw.xtra{display:none} .gcard.all:not(.narrow) .gw.xtra{display:flex} .gcard.narrow .gw.mx{display:none}
 .gi{width:26px;height:38px;border-radius:6px;flex:none;background:var(--chip);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:600;color:var(--mut)}
@@ -1388,12 +1388,17 @@ JS = """
   function unpress(el,wait){ setTimeout(function(){ el.classList.remove('tap'); }, wait||0); }
   /* safety net: a pressed look must never outlive the touch (a 2nd finger, a scroll grab or a cancelled
      touch used to leave a card stuck shrunk with a dark border) */
+  function pressSize(w){   /* same absolute inset on every side (3px), not 3% of the card: a tall card used to shrink by tens of pixels */
+    if(!w.classList.contains('card')) return;
+    var r=w.getBoundingClientRect(); if(r.width<40 || r.height<40) return;
+    w.style.setProperty('--tsx',(1-6/r.width).toFixed(4)); w.style.setProperty('--tsy',(1-6/r.height).toFixed(4));
+  }
   function clearTaps(){ clearTimeout(pressT); pressEl=null; [].forEach.call(document.querySelectorAll('.card.now.tap, .gw.tap'),function(x){ x.classList.remove('tap'); }); }
   document.addEventListener('pointerdown',function(e){
     clearTaps();
     var w=pressable(e.target); if(!w) return;
     pressEl=w; pressX=e.clientX; pressY=e.clientY; w._t=0;
-    pressT=setTimeout(function(){ w.classList.add('tap'); w._t=Date.now(); },70);
+    pressT=setTimeout(function(){ pressSize(w); w.classList.add('tap'); w._t=Date.now(); },70);
   },true);
   document.addEventListener('pointermove',function(e){
     if(pressEl && (Math.abs(e.clientX-pressX)>8 || Math.abs(e.clientY-pressY)>8)){ clearTimeout(pressT); pressEl.classList.remove('tap'); pressEl=null; }
@@ -1407,7 +1412,7 @@ JS = """
   document.addEventListener('visibilitychange',function(){ if(document.hidden) clearTaps(); });
   var pressOpening=false;
   function pressOpen(fl,card){
-    fl.classList.add('tap'); fl._t=fl._t||Date.now(); pressOpening=true;
+    pressSize(fl); fl.classList.add('tap'); fl._t=fl._t||Date.now(); pressOpening=true;
     setTimeout(function(){ pressOpening=false; open(card); unpress(fl,80); },120);
   }
   document.addEventListener('keydown',function(e){
