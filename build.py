@@ -1713,6 +1713,15 @@ def sitemap_xml(today):
             + '</urlset>\n')
 
 
+def sitemap_clean_xml():
+    """Minimal sitemap for Google: only <loc>, exactly the basic example from Google's docs (no lastmod / changefreq)."""
+    urls = [SITE_URL] + [f"{SITE_URL}{THEATER_SLUG[k]}/" for k, _ in THEATERS]
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "".join(f"  <url>\n    <loc>{u}</loc>\n  </url>\n" for u in urls)
+            + '</urlset>\n')
+
+
 def theater_page(key, movies, today, tomorrow, tmrw_ok):
     """Static, crawlable page for one theater: today's (and tomorrow's) showtimes as plain text, address, links."""
     name, addr = dict(THEATERS)[key], THEATER_ADDR[key]
@@ -2153,6 +2162,8 @@ def main():
         f.write(render(movies, soon, today, warnings, tomorrow, tmrw_ok))
     with open(os.path.join(os.path.dirname(OUT), "sitemap.xml"), "w", encoding="utf-8") as f:
         f.write(sitemap_xml(today))
+    with open(os.path.join(os.path.dirname(OUT), "sitemap-google.xml"), "w", encoding="utf-8") as f:
+        f.write(sitemap_clean_xml())
     for k, _ in THEATERS:
         d = os.path.join(os.path.dirname(OUT), THEATER_SLUG[k])
         os.makedirs(d, exist_ok=True)
