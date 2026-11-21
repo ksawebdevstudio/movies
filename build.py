@@ -916,6 +916,7 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .card.now{cursor:pointer;transition:border-color .12s}
 .card.now:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .card.now:hover{border-color:var(--mut)}
+@media (hover:none){.card.now:hover{border-color:var(--cline)}}   /* touch: no sticky dark border after a tap */
 /* tap hint: until a card is opened, a wave runs over the theater blocks on screen (left to right) or over the movie rows (first to last): each one
    comes alive for a moment - richer and brighter color, slightly bigger, a tiny lift - and settles back */
 @media (prefers-reduced-motion:no-preference){
@@ -1385,7 +1386,11 @@ JS = """
   var pressT=null, pressEl=null, pressX=0, pressY=0;
   function pressable(t){ return !t.closest('a, button, .t[data-buy], .c[data-buy], #sheet, .zoom') && t.closest('.gw, .card.now'); }
   function unpress(el,wait){ setTimeout(function(){ el.classList.remove('tap'); }, wait||0); }
+  /* safety net: a pressed look must never outlive the touch (a 2nd finger, a scroll grab or a cancelled
+     touch used to leave a card stuck shrunk with a dark border) */
+  function clearTaps(){ clearTimeout(pressT); pressEl=null; [].forEach.call(document.querySelectorAll('.card.now.tap, .gw.tap'),function(x){ x.classList.remove('tap'); }); }
   document.addEventListener('pointerdown',function(e){
+    clearTaps();
     var w=pressable(e.target); if(!w) return;
     pressEl=w; pressX=e.clientX; pressY=e.clientY; w._t=0;
     pressT=setTimeout(function(){ w.classList.add('tap'); w._t=Date.now(); },70);
@@ -1395,10 +1400,15 @@ JS = """
   },true);
   function release(){ clearTimeout(pressT); if(pressEl && pressEl._t) unpress(pressEl, Math.max(0,180-(Date.now()-pressEl._t))); pressEl=null; }
   document.addEventListener('pointerup',release,true);
-  document.addEventListener('pointercancel',function(){ clearTimeout(pressT); if(pressEl) pressEl.classList.remove('tap'); pressEl=null; },true);
+  document.addEventListener('pointercancel',clearTaps,true);
+  document.addEventListener('touchcancel',clearTaps,true);
+  window.addEventListener('scroll',function(){ if(!pressOpening) clearTaps(); },{passive:true});
+  window.addEventListener('pagehide',clearTaps); window.addEventListener('pageshow',clearTaps);
+  document.addEventListener('visibilitychange',function(){ if(document.hidden) clearTaps(); });
+  var pressOpening=false;
   function pressOpen(fl,card){
-    fl.classList.add('tap'); fl._t=fl._t||Date.now();
-    setTimeout(function(){ open(card); unpress(fl,80); },120);
+    fl.classList.add('tap'); fl._t=fl._t||Date.now(); pressOpening=true;
+    setTimeout(function(){ pressOpening=false; open(card); unpress(fl,80); },120);
   }
   document.addEventListener('keydown',function(e){
     if(e.key==='Escape' && zoom){ zoomOut(); return; }
