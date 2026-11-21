@@ -7,10 +7,7 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write    # only for the keep-alive commit below
-  pages: write
-  id-token: write
+permissions: {}      # nothing by default; each job asks only for what it needs
 
 concurrency:
   group: pages
@@ -20,37 +17,29 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read     # build only reads the repository
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v6
-
-      # GitHub pauses scheduled workflows after 60 days without commits.
-      # If the last commit is older than 45 days, add an empty one.
-      - name: Keep the schedule alive
-        if: github.event_name == 'schedule'
-        continue-on-error: true      # never let this block the page build
-        run: |
-          last=$(git log -1 --format=%ct)
-          if [ $(( $(date +%s) - last )) -gt $(( 45 * 86400 )) ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-            git commit --allow-empty -m "keepalive"
-            git push
-          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+        with:
+          persist-credentials: false
 
       - name: Build page
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: python3 build.py
 
-      - uses: actions/upload-pages-artifact@v5
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         with:
           path: site
 
       - id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5
 
       # Runs last, even if something above failed. The page is already published;
       # if build.py found problems (or a step failed) the run is marked red,
@@ -80,3 +69,24 @@ jobs:
             exit 1
           fi
           echo "All good."
+
+  # GitHub pauses scheduled workflows after 60 days without commits.
+  # If the last commit is older than 45 days, add an empty one. This is the only job with write access.
+  keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+      - name: Keep the schedule alive
+        continue-on-error: true      # never let this block anything
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt $(( 45 * 86400 )) ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keepalive"
+            git push
+          fi

@@ -1347,7 +1347,7 @@ JS = """
   document.addEventListener('click',function(e){
     if(e.target.closest('.sheet-bg, .sheet-x')){ close(); return; }
     var bt=e.target.closest('.t[data-buy], .c[data-buy]');   /* a showtime with its own ticket link */
-    if(bt && !bt.classList.contains('past')){ e.preventDefault(); window.open(bt.dataset.buy,'_blank','noopener'); return; }
+    if(bt && !bt.classList.contains('past') && /^https:[/][/]/i.test(bt.dataset.buy)){ e.preventDefault(); window.open(bt.dataset.buy,'_blank','noopener'); return; }
     if(e.target.closest('a')) return;            /* theater block: follow the link */
     var c=e.target.closest('.card.now');
     if(c) pressOpen(c,c);
@@ -1718,6 +1718,7 @@ def theater_page(key, movies, today, tomorrow, tmrw_ok):
           if tmrw_html else "")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="base-uri 'none'; object-src 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{a(title)}</title>
 <meta name="description" content="{a(desc)}">
@@ -1776,6 +1777,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
         for k, n in THEATERS)
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="base-uri 'none'; object-src 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {seo_head(today)}
 <link rel="icon" type="image/png" sizes="32x32" href="icon-32.png">
@@ -1954,10 +1956,66 @@ def step_summary(line):
             f.write(f"- {line}\n")
 
 
+# Outgoing links: only https links to the theaters' own sites may reach the page. A tampered or compromised source
+# page must not be able to send visitors to a look-alike ticket page or slip in a javascript: link.
+LINK_HOSTS = {urllib.parse.urlsplit(u).hostname
+              for u in (CINEMARK_BASE, REGAL_BASE, FESTIVAL_BASE, DPLACE_BASE, *THEATER_URLS.values())}
+
+
+def link_ok(url):
+    """True for a plain https link to one of LINK_HOSTS (no user-info, no odd port, no spaces or backslashes)."""
+    try:
+        if not isinstance(url, str) or re.search(r"[\s\\\x00-\x1f\x7f]", url):
+            return False
+        p = urllib.parse.urlsplit(url)
+        return p.scheme == "https" and p.hostname in LINK_HOSTS and "@" not in p.netloc and p.port in (None, 443)
+    except ValueError:
+        return False
+
+
+def image_ok(url):
+    """Posters only need to be plain https images (they come from TMDB or the theater's own artwork)."""
+    try:
+        return (isinstance(url, str) and not re.search(r"[\s\\\x00-\x1f\x7f]", url)
+                and urllib.parse.urlsplit(url).scheme == "https" and bool(urllib.parse.urlsplit(url).hostname))
+    except ValueError:
+        return False
+
+
+def _safe_host(url):
+    """A short, log-safe description of where a rejected link pointed."""
+    try:
+        h = urllib.parse.urlsplit(str(url)).hostname or str(url)[:30]
+    except ValueError:
+        h = str(url)[:30]
+    return re.sub(r"[^A-Za-z0-9.:-]", "?", h)[:60]
+
+
+def sanitize_showings(showings, problems):
+    """Drop any ticket link or poster that fails the checks above. A dropped ticket link falls back to the theater's own
+    page; every drop is reported in problems.txt, which turns the run red (the owner gets GitHub's failure e-mail)."""
+    bad = Counter()
+    for s in showings:
+        th = s.get("theater")
+        if s.get("url") and not link_ok(s["url"]):
+            bad[(th, "link", _safe_host(s["url"]))] += 1
+            s["url"] = THEATER_URLS.get(th, SITE_URL)
+        if s.get("buy") and not link_ok(s["buy"]):
+            bad[(th, "ticket link", _safe_host(s["buy"]))] += 1
+            s["buy"] = None
+        if s.get("poster") and not image_ok(s["poster"]):
+            bad[(th, "poster", _safe_host(s["poster"]))] += 1
+            s["poster"] = None
+    for (th, kind, host), n in sorted(bad.items(), key=str):
+        problems.append(f"SECURITY: {n} {kind}(s) at {THEATER_NAMES.get(th, th)} pointed to an unexpected address "
+                        f"({host}) and were dropped - check that theater's page for tampering")
+    return showings
+
+
 def write_problems(problems):
     """problems.txt is empty when everything is fine; the workflow fails the run otherwise."""
     with open(PROBLEMS_FILE, "w", encoding="utf-8") as f:
-        f.write("".join(p + "\n" for p in problems))
+        f.write("".join(re.sub(r"[\x00-\x1f\x7f]+", " ", p) + "\n" for p in problems))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary and problems:
         with open(summary, "a", encoding="utf-8") as f:
@@ -2028,6 +2086,7 @@ def main():
             write_problems(problems)
             sys.exit("All theaters failed; keeping the previously published page.")
 
+    showings = sanitize_showings(showings, problems)
     movies = build_movies(showings, use_tmdb)
     if use_tmdb:
         try:

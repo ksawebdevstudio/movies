@@ -1,0 +1,6 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"   # keeps the pinned action hashes current via reviewable PRs
+    directory: "/"
+    schedule:
+      interval: "weekly"
