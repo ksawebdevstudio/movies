@@ -857,8 +857,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .meta{margin:4px 0 8px;font-size:.85rem}
 .rating{color:var(--acc);font-weight:600} .rating.few{color:var(--mut)} .votes{color:var(--mut);font-size:.75rem;margin-left:6px} .rating.none{color:var(--mut);font-weight:400}
 .th{--tc:#888;--tb:rgba(136,136,136,.10);display:block;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--tb);color:var(--fg);text-decoration:none;transition:filter .12s,transform .12s}
-.th:hover{background:color-mix(in srgb,var(--tc) 30%,transparent)} .th:active{transform:scale(.98)}
-@media (prefers-color-scheme:light){.th:hover{background:color-mix(in srgb,var(--tc) 22%,transparent)}}
+@media (hover:hover){.th:hover{background:color-mix(in srgb,var(--tc) 30%,transparent)}}   /* hover only where a pointer can hover: on a phone it stuck after a tap */
+.th:active{transform:scale(var(--thx,.98),var(--thy,.98))}   /* --thx/--thy set in JS: the same 3px shrink on a 1-row block and a 12-row block */
+@media (hover:hover) and (prefers-color-scheme:light){.th:hover{background:color-mix(in srgb,var(--tc) 22%,transparent)}}
 /* red / green / blue / purple, plus a muted honey for La Quinta */
 [data-th="cinemark"]{--tc:#f0506a;--tb:rgba(240,80,106,.17)}
 [data-th="regal"]{--tc:#2fc48a;--tb:rgba(47,196,138,.16)}
@@ -889,8 +890,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t.past{opacity:.45;text-decoration:line-through}
 .t[data-buy]:not(.past),.c[data-buy]:not(.past){cursor:pointer;transition:filter .12s}
-.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(.93);text-decoration:underline;text-underline-offset:2px}
-@media (prefers-color-scheme:dark){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(1.35)}}
+@media (hover:hover){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(.93);text-decoration:underline;text-underline-offset:2px}}
+@media (hover:hover) and (prefers-color-scheme:dark){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(1.35)}}
 /* tomorrow: dashed outline in the theater's colour at half strength (plain colour where color-mix is unsupported) */
 .times.d1 .t{background:transparent;border:1px dashed var(--tc);border-color:color-mix(in srgb,var(--tc) 55%,transparent)}
 .lab{flex-basis:100%;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
@@ -995,11 +996,11 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .credit .c2 a{color:inherit}
 .cbtn{display:inline-flex;align-items:center;gap:8px;background:#f5b301;color:#15171c;font-weight:700;font-size:.85rem;text-decoration:none;
   padding:8px 14px;border-radius:999px;transition:filter .15s,transform .15s;-webkit-tap-highlight-color:transparent}
-.cbtn:hover{filter:brightness(1.06)} .cbtn:active{transform:scale(.97)}
+@media (hover:hover){.cbtn:hover{filter:brightness(1.06)}} .cbtn:active{transform:scale(.97)}
 .cbtn svg{width:16px;height:16px}
 .sth{display:block;color:var(--fg);text-decoration:none;background:var(--tb,rgba(136,136,136,.1));border-radius:10px;padding:10px 12px;margin-top:10px;transition:background .12s}
-.sth:hover{background:color-mix(in srgb,var(--tc,#888) 30%,transparent)}
-@media (prefers-color-scheme:light){.sth:hover{background:color-mix(in srgb,var(--tc,#888) 22%,transparent)}}
+@media (hover:hover){.sth:hover{background:color-mix(in srgb,var(--tc,#888) 30%,transparent)}}
+@media (hover:hover) and (prefers-color-scheme:light){.sth:hover{background:color-mix(in srgb,var(--tc,#888) 22%,transparent)}}
 .sthn{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.92rem}
 .sthn::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--tc,#888);flex:none}
 .sthn i{margin-left:auto;flex:none;white-space:nowrap;font-style:normal;font-weight:600;font-size:.75rem;color:#fff;background:var(--tc,#888);padding:4px 10px;border-radius:999px}
@@ -1396,6 +1397,8 @@ JS = """
   function clearTaps(){ clearTimeout(pressT); pressEl=null; [].forEach.call(document.querySelectorAll('.card.now.tap, .gw.tap'),function(x){ x.classList.remove('tap'); }); }
   document.addEventListener('pointerdown',function(e){
     clearTaps();
+    var tb=e.target.closest && e.target.closest('.th');   /* theater block: fixed 3px press shrink, not 2% of its height */
+    if(tb){ var tr=tb.getBoundingClientRect(); if(tr.width>=40 && tr.height>=20){ tb.style.setProperty('--thx',(1-3/tr.width).toFixed(4)); tb.style.setProperty('--thy',(1-3/tr.height).toFixed(4)); } }
     var w=pressable(e.target); if(!w) return;
     pressEl=w; pressX=e.clientX; pressY=e.clientY; w._t=0;
     pressT=setTimeout(function(){ pressSize(w); w.classList.add('tap'); w._t=Date.now(); },70);
