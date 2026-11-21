@@ -43,6 +43,8 @@ RERELEASE_DAYS = 548   # first released more than ~18 months ago -> "Re-release"
 # when TMDB did not recognise the title (so a film such as "The Phantom of the Opera" stays a film).
 EVENT_STRONG = re.compile(r"\b(met(ropolitan)? opera|national theatre|nt live|bolshoi|royal ballet|ufc|wwe|aew|"
                           r"fathom events?|in concert|special event|live broadcast)\b", re.I)
+# a theater's own listing for a special showing of a film, e.g. "Sunrise Screening - The Hunger Games: ..."
+SPECIAL_SHOW = re.compile(r"^[\w' ]{1,24}\bScreenings?\s+-\s+\S", re.I)
 EVENT_WEAK = re.compile(r"\b(opera|ballet|concert|live|encore|tour|fight night|boxing|trivia|q ?& ?a|"
                         r"marathon|double feature|festival)\b", re.I)        # fewer showtimes than this for a theater on a day = probably broken, raise an alert
 
@@ -739,7 +741,9 @@ def build_movies(showings, use_tmdb):
     for g in movies:  # small poster label: Event / Re-release <year>
         names = f'{g["raw_title"]} {g["title"]} {g["th_genre"] or ""}'
         g["label"] = None
-        if EVENT_STRONG.search(names) or (not g["tmdb_id"] and EVENT_WEAK.search(names)) \
+        if SPECIAL_SHOW.search(g["raw_title"]):
+            g["label"] = "Special screening"
+        elif EVENT_STRONG.search(names) or (not g["tmdb_id"] and EVENT_WEAK.search(names)) \
                 or re.search(r"\b(event|concert|opera)\b", g["th_genre"] or "", re.I):
             g["label"] = "Event"
         elif g["released"][:4].isdigit() and g["released"] < old:
@@ -1050,10 +1054,11 @@ body.pm .card.tonly .plab2{display:block}
 /* poster view: a plain pill (same look as the view switcher at the top) in the bottom right of the caption, holding a chevron.
    The caption's bottom gap is trimmed so it matches the top; more room above the rating row keeps a wrapped title off the pill. Sizes come from --pw/--ph/--ps/--pr/--pb/--pd (defaults here; --pd = corner radius, 12px like the card). */
 body.pm .card.now .meta{margin:10px 0 0}
-body.pm .card.now::after{content:"";position:absolute;right:var(--pr,7px);bottom:var(--pb,7px);width:var(--pw,22px);height:var(--ph,22px);border-radius:var(--pd,11px);pointer-events:none;z-index:1;
+body.pm .card.now::after{content:"";position:absolute;right:var(--pr,8px);bottom:var(--pb,8px);width:var(--pw,20px);height:var(--ph,20px);border-radius:var(--pd,10px);pointer-events:none;z-index:1;
   background:var(--chip) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2314161c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E") center/var(--ps,16px) var(--ps,16px) no-repeat}
 @media (prefers-color-scheme:dark){body.pm .card.now::after{
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.4 4.4 10 8l-3.6 3.6'/%3E%3C/svg%3E")}}
+@media (max-width:700px){body.pm .card.now::after{right:var(--pr,5px);bottom:var(--pb,7px)}}   /* same inset as the Showtimes circle (6px from the edge incl. the card's 1px border); on phones that block is tighter */
 /* list view: one card with every movie instead of the posters */
 body.lm #nowgrid{display:none}
 .gcard,.glist{display:none;background:var(--card);border:1px solid var(--cline);border-radius:12px;
