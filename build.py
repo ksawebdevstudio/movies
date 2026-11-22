@@ -549,13 +549,20 @@ def _tmdb(path, **params):
     return json.loads(http(f"{TMDB}{path}?{urllib.parse.urlencode(params)}", headers=headers))
 
 
+ANNIV_TAIL = re.compile(r"\s*(?:[-:]\s*)?\d+(?:st|nd|rd|th)\s+anniversary\b.*$", re.I)
+ANNIV_ANY = re.compile(r"\b\d+(?:st|nd|rd|th)\s+anniversary\b", re.I)
+
+
 def clean_title(t):
     t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM)\s*:\s*", "", t.strip(), flags=re.I)
     t = re.sub(r"\([^)]*\)", " ", t)
     suffix = (r"\s+-\s+(the imax experience|sensory friendly|open caption\w*|(english )?dubbed|(english )?subtitled|(\d{4}\s+)?re-?issue(\s+\d{4})?"
-              r"|\d+(st|nd|rd|th)\s+anniversary.*|early access.*|fan event.*)\s*$")
+              r"|early access.*|fan event.*)\s*$")
     for _ in range(3):
         t = re.sub(suffix, "", t, flags=re.I)
+        cut = ANNIV_TAIL.sub("", t)          # "... 25th Anniversary", "...: 25th Anniversary", "... - 25th Anniversary - Fest"
+        if len(cut.strip()) >= 2:            # never reduce a title to nothing
+            t = cut
     t = re.sub(r"\s+in 3d\s*$", "", t, flags=re.I)
     t = re.sub(r"\b(early access|reissue|encore|anniversary.*)$", " ", t, flags=re.I)
     return re.sub(r"\s+", " ", t).strip()
@@ -712,6 +719,8 @@ def build_movies(showings, use_tmdb):
                                         released=(info or {}).get("release_date") or "", year_hint=None,
                                         raw_title=s["title"], th_rt=None, th_genre=None, by_theater={}))
         g["year_hint"] = g["year_hint"] or s.get("year")
+        if ANNIV_ANY.search(s["title"]):
+            g["anniv"] = True
         g["th_rt"] = g["th_rt"] or s.get("rt")
         g["th_genre"] = g["th_genre"] or s.get("genre")
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s.get("fmt", ""))] = s["url"]
@@ -730,6 +739,7 @@ def build_movies(showings, use_tmdb):
             for th, pst in src["alt_posters"].items():
                 target["alt_posters"].setdefault(th, pst)
             target["buy"].update(src["buy"])
+            target["anniv"] = target.get("anniv") or src.get("anniv")
             target["th_rt"] = target["th_rt"] or src["th_rt"]
             target["th_genre"] = target["th_genre"] or src["th_genre"]
     movies = list(groups.values())
@@ -750,6 +760,8 @@ def build_movies(showings, use_tmdb):
             g["label"] = f'Re-release <i>{g["released"][:4]}</i>'
         elif not g["released"] and str(g["year_hint"] or "").isdigit() and f'{g["year_hint"]}-12-31' < old:
             g["label"] = f'Re-release <i>{g["year_hint"]}</i>'
+        elif g.get("anniv"):   # "Nth Anniversary" in the theater's title but no release date known (TMDB miss)
+            g["label"] = "Re-release"
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
             g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford", "laquinta")
