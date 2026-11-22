@@ -2091,6 +2091,51 @@ def write_problems(problems):
         print("PROBLEM:", p)
 
 
+ANOMALY_TAIL = re.compile(r"(\b\d+(st|nd|rd|th)\s*$)|\b(anniversary|reissue|re-issue|early access|remastered|restored|encore|4k|imax|dolby)\b", re.I)
+ANOMALY_EDITION = re.compile(r"^\s*(\d+(st|nd|rd|th)|anniversary|reissue|re-issue|remastered|restored|4k|imax|dolby|early access|encore)\b", re.I)
+
+
+def find_anomalies(movies, use_tmdb):
+    """Things that look wrong in the finished card list (never fails the run; printed as 'ANOMALY:' lines, the weekly report reads them).
+    Heuristics only: a duplicate card, a leftover edition tag in a title, a title TMDB could not match."""
+    out = []
+    for g in movies:
+        t = g["title"]
+        if ANOMALY_TAIL.search(t):
+            out.append(f'"{t}": the title still has an edition tag (25th / Anniversary / 4K ...) - clean_title may need a new rule')
+    norms = {}
+    for g in movies:
+        norms.setdefault(norm(g["title"]), []).append(g)
+    keys = sorted(norms, key=len)
+    for i, a in enumerate(keys):
+        for b in keys[i + 1:]:
+            if len(a) >= 6 and b.startswith(a) and ANOMALY_EDITION.match(re.sub(r"^[^0-9a-z]+", "", b[len(a):])):
+                out.append(f'possible duplicate: "{norms[a][0]["title"]}" and "{norms[b][0]["title"]}" (the same film with an edition tag?)')
+    seen = {}
+    for g in movies:
+        if g.get("poster"):
+            seen.setdefault(g["poster"], []).append(g["title"])
+    for url, names in seen.items():
+        if len(names) > 1:
+            out.append(f'possible duplicate: {len(names)} cards share one poster ({" / ".join(names[:3])})')
+    if use_tmdb and movies:
+        unm = [g["title"] for g in movies if not g["tmdb_id"] and not g.get("label")]
+        if unm:
+            out.append(f'{len(unm)} card(s) without a TMDB match and without an Event/Re-release label (no rating): ' + "; ".join(unm[:6]))
+        if len([g for g in movies if not g["tmdb_id"]]) > 0.35 * len(movies):
+            out.append("TMDB matching looks degraded: more than 35% of cards have no TMDB match")
+    return out
+
+
+def write_anomalies(anomalies):
+    for a in anomalies:
+        print("ANOMALY:", a)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary and anomalies:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write("### Anomalies (heuristics, the run stays green)\n" + "".join(f"- {a}\n" for a in anomalies))
+
+
 def main():
     started = time.time()
     problems = []
@@ -2167,6 +2212,7 @@ def main():
         if not soon:
             problems.append("TMDB: the 'Coming soon' list is empty")
 
+    write_anomalies(find_anomalies(movies, use_tmdb))
     write_problems(problems)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     write_icons(os.path.dirname(OUT))
