@@ -550,6 +550,9 @@ def _tmdb(path, **params):
 
 
 ANNIV_TAIL = re.compile(r"\s*(?:[-:]\s*)?\d+(?:st|nd|rd|th)\s+anniversary\b.*$", re.I)
+# edition tags that mean "the same old film again": "The Host - 4K", "Heat 4K", "Alien - Director's Cut", "Jaws - Restored"
+EDITION_TAIL = re.compile(r"(?:\s+-\s+(?:4k(?:\s+(?:restoration|remaster(?:ed)?))?|remaster(?:ed)?|restor(?:ed|ation)|director'?s\s+cut|extended(?:\s+(?:cut|edition))?|35mm|70mm)"
+                          r"|\s+(?:4k|remastered|35mm|70mm))\s*$", re.I)
 ANNIV_ANY = re.compile(r"\b\d+(?:st|nd|rd|th)\s+anniversary\b", re.I)
 
 
@@ -562,6 +565,9 @@ def clean_title(t):
         t = re.sub(suffix, "", t, flags=re.I)
         cut = ANNIV_TAIL.sub("", t)          # "... 25th Anniversary", "...: 25th Anniversary", "... - 25th Anniversary - Fest"
         if len(cut.strip()) >= 2:            # never reduce a title to nothing
+            t = cut
+        cut = EDITION_TAIL.sub("", t)
+        if len(cut.strip()) >= 2:
             t = cut
     t = re.sub(r"\s+in 3d\s*$", "", t, flags=re.I)
     t = re.sub(r"\b(early access|reissue|encore|anniversary.*)$", " ", t, flags=re.I)
@@ -688,10 +694,21 @@ def info_genres(info):
     return [n.replace("Science Fiction", "Sci-Fi") for n in names if n][:2]
 
 
+def has_edition(title):
+    """EDITION_TAIL also on "The Host (4K)": parentheses are dropped by clean_title, so look at the text inside them too."""
+    return bool(EDITION_TAIL.search(re.sub(r"\(([^)]*)\)", r" \1 ", title).strip()))
+
+
+def skip_tmdb(s):
+    """An edition-tagged re-release with no TMDB id and no year ("The Host - 4K"): a title search would pick the most popular
+    film of that name (there are two 'The Host'), i.e. a possibly wrong poster, rating and year. Better no rating than a wrong one."""
+    return has_edition(s["title"]) and not s["tmdb_id"] and not s.get("year")
+
+
 def prefetch_tmdb(showings):
     """Do all TMDB lookups up front, in parallel; build_movies then reads the cache."""
     ids = {s["tmdb_id"] for s in showings if s["tmdb_id"]}
-    titles = {(s["title"], s.get("year")) for s in showings if not s["tmdb_id"]}
+    titles = {(s["title"], s.get("year")) for s in showings if not s["tmdb_id"] and not skip_tmdb(s)}
     titles |= {(s["title"], None) for s in showings if s["tmdb_id"]}  # fallback if an id lookup fails
     pmap(tmdb_by_id, ids)
     pmap(lambda ty: tmdb_by_title(*ty), titles)
@@ -703,7 +720,7 @@ def build_movies(showings, use_tmdb):
     groups = {}
     for s in showings:
         info = None
-        if use_tmdb:
+        if use_tmdb and not skip_tmdb(s):
             info = tmdb_by_id(s["tmdb_id"]) if s["tmdb_id"] else tmdb_by_title(s["title"], s.get("year"))
             if info is None and s["tmdb_id"]:
                 info = tmdb_by_title(s["title"])
@@ -721,6 +738,8 @@ def build_movies(showings, use_tmdb):
         g["year_hint"] = g["year_hint"] or s.get("year")
         if ANNIV_ANY.search(s["title"]):
             g["anniv"] = True
+        if has_edition(s["title"]):
+            g["edition"] = True
         g["th_rt"] = g["th_rt"] or s.get("rt")
         g["th_genre"] = g["th_genre"] or s.get("genre")
         g["by_theater"].setdefault(s["theater"], {})[(s["ts"], s.get("fmt", ""))] = s["url"]
@@ -740,6 +759,7 @@ def build_movies(showings, use_tmdb):
                 target["alt_posters"].setdefault(th, pst)
             target["buy"].update(src["buy"])
             target["anniv"] = target.get("anniv") or src.get("anniv")
+            target["edition"] = target.get("edition") or src.get("edition")
             target["th_rt"] = target["th_rt"] or src["th_rt"]
             target["th_genre"] = target["th_genre"] or src["th_genre"]
     movies = list(groups.values())
@@ -760,7 +780,7 @@ def build_movies(showings, use_tmdb):
             g["label"] = f'Re-release <i>{g["released"][:4]}</i>'
         elif not g["released"] and str(g["year_hint"] or "").isdigit() and f'{g["year_hint"]}-12-31' < old:
             g["label"] = f'Re-release <i>{g["year_hint"]}</i>'
-        elif g.get("anniv"):   # "Nth Anniversary" in the theater's title but no release date known (TMDB miss)
+        elif g.get("anniv") or g.get("edition"):   # "Nth Anniversary" / "4K" / "Remastered" in the theater's title, no release date known
             g["label"] = "Re-release"
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
