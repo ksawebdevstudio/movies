@@ -34,6 +34,15 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: python3 build.py
 
+      - name: Keep today's title list for the history job
+        if: github.event_name != 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
+        with:
+          name: titles-today
+          path: titles-today.json
+          if-no-files-found: ignore
+          retention-days: 2
+
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5
         with:
           path: site
@@ -90,3 +99,43 @@ jobs:
             git commit --allow-empty -m "keepalive"
             git push
           fi
+
+  # Keeps a running list of every title the theaters used (raw names, TMDB match, anomalies) on the 'data' branch,
+  # so months of real data pile up for spotting new naming patterns. Never blocks or fails anything.
+  # Write access is limited to this job (like keepalive); the build job above still only reads.
+  log-titles:
+    if: always() && github.event_name != 'push'
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+      - name: Merge today's titles into the history
+        continue-on-error: true      # never let this block anything
+        run: |
+          set -e
+          if ! git fetch --depth=1 origin data; then echo "no data branch yet"; fi
+          if git rev-parse --verify -q origin/data >/dev/null; then
+            git worktree add datawt -B data origin/data
+          else
+            git worktree add --orphan -b data datawt
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8
+        continue-on-error: true
+        with:
+          name: titles-today
+      - name: Commit the history
+        continue-on-error: true
+        run: |
+          set -e
+          [ -f titles-today.json ] || { echo "no titles file today"; exit 0; }
+          python3 merge_titles.py titles-today.json datawt/titles.json
+          cd datawt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add titles.json
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -m "titles history $(date -u +%F)"
+          git push origin data

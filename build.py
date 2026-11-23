@@ -736,6 +736,7 @@ def build_movies(showings, use_tmdb):
                                         released=(info or {}).get("release_date") or "", year_hint=None,
                                         raw_title=s["title"], th_rt=None, th_genre=None, by_theater={}))
         g["year_hint"] = g["year_hint"] or s.get("year")
+        g.setdefault("raws", set()).add(s["title"])
         if ANNIV_ANY.search(s["title"]):
             g["anniv"] = True
         if has_edition(s["title"]):
@@ -758,6 +759,7 @@ def build_movies(showings, use_tmdb):
             for th, pst in src["alt_posters"].items():
                 target["alt_posters"].setdefault(th, pst)
             target["buy"].update(src["buy"])
+            target.setdefault("raws", set()).update(src.get("raws", ()))
             target["anniv"] = target.get("anniv") or src.get("anniv")
             target["edition"] = target.get("edition") or src.get("edition")
             target["th_rt"] = target["th_rt"] or src["th_rt"]
@@ -2156,6 +2158,26 @@ def write_anomalies(anomalies):
             f.write("### Anomalies (heuristics, the run stays green)\n" + "".join(f"- {a}\n" for a in anomalies))
 
 
+TITLES_TODAY = "titles-today.json"
+
+
+def write_titles_today(movies, anomalies, today):
+    """One record per card: the card title, the raw names the theaters used, where it plays, TMDB match, label, anomalies.
+    The workflow's log-titles job merges this file into titles.json on the 'data' branch, so real titles pile up over time.
+    Never fails the run."""
+    try:
+        recs = []
+        for g in movies:
+            t = g["title"]
+            recs.append({"title": t, "raws": sorted(g.get("raws") or [g.get("raw_title", t)]),
+                         "theaters": sorted(g["by_theater"]), "tmdb": bool(g["tmdb_id"]),
+                         "label": re.sub(r"<[^>]+>", "", g.get("label") or "").strip(), "anomalies": [a for a in anomalies if t in a]})
+        with open(TITLES_TODAY, "w", encoding="utf-8") as f:
+            json.dump({"date": today, "titles": recs}, f, ensure_ascii=False, indent=1)
+    except Exception as e:  # noqa: BLE001
+        print(f"titles log skipped: {e}")
+
+
 def main():
     started = time.time()
     problems = []
@@ -2232,7 +2254,9 @@ def main():
         if not soon:
             problems.append("TMDB: the 'Coming soon' list is empty")
 
-    write_anomalies(find_anomalies(movies, use_tmdb))
+    anomalies = find_anomalies(movies, use_tmdb)
+    write_anomalies(anomalies)
+    write_titles_today(movies, anomalies, today)
     write_problems(problems)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     write_icons(os.path.dirname(OUT))
