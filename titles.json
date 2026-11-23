@@ -3,10 +3,10 @@
  "titles": {
   "A Beautiful Mind": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "Re-release 2001",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "A Beautiful Mind - 25th Anniversary",
     "A Beautiful Mind 25th Anniversary "
@@ -20,10 +20,10 @@
   },
   "Aakasamlo Oka Tara": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Aakasamlo Oka Tara"
    ],
@@ -34,10 +34,10 @@
   },
   "Being Heumann": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Being Heumann"
    ],
@@ -46,12 +46,41 @@
    ],
    "tmdb": true
   },
-  "Clayface": {
+  "Bitter Christmas": {
    "anomalies": [],
    "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Bitter Christmas"
+   ],
+   "theaters": [
+    "festival",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Blade II": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-23",
+   "label": "Re-release 2002",
+   "last": "2026-11-23",
+   "raws": [
+    "Blade II"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Clayface": {
+   "anomalies": [],
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Clayface"
    ],
@@ -62,24 +91,42 @@
   },
   "Club Kid": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Club Kid"
    ],
    "theaters": [
-    "cinemark"
+    "cinemark",
+    "festival"
    ],
    "tmdb": true
   },
+  "Disney's Hexed": {
+   "anomalies": [
+    "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
+   ],
+   "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Disney's Hexed"
+   ],
+   "theaters": [
+    "cinemark",
+    "laquinta"
+   ],
+   "tmdb": false
+  },
   "Doctor Who: The Satan Pit": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "Event",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Doctor Who: The Satan Pit"
    ],
@@ -91,10 +138,10 @@
   },
   "Drummer Boy": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Drummer Boy"
    ],
@@ -106,10 +153,10 @@
   },
   "ENE Repeat": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "ENE Repeat"
    ],
@@ -120,10 +167,10 @@
   },
   "Ebenezer": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Ebenezer"
    ],
@@ -136,12 +183,26 @@
    ],
    "tmdb": true
   },
-  "Fjord": {
+  "Elsinore": {
    "anomalies": [],
    "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Elsinore"
+   ],
+   "theaters": [
+    "festival"
+   ],
+   "tmdb": true
+  },
+  "Fjord": {
+   "anomalies": [],
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Fjord"
    ],
@@ -152,10 +213,10 @@
   },
   "Ghost Soldier": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Ghost Soldier"
    ],
@@ -183,10 +244,10 @@
   },
   "Godzilla Minus Zero": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Godzilla Minus Zero",
     "Godzilla Minus Zero (Japanese with English Subtitles)"
@@ -199,12 +260,44 @@
    ],
    "tmdb": true
   },
-  "How to Rob a Bank": {
+  "Hershey": {
    "anomalies": [],
    "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Hershey"
+   ],
+   "theaters": [
+    "cinemark",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Hexed": {
+   "anomalies": [
+    "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
+   ],
+   "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Hexed"
+   ],
+   "theaters": [
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "How to Rob a Bank": {
+   "anomalies": [],
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "How to Rob a Bank"
    ],
@@ -218,10 +311,10 @@
   },
   "I Play Rocky": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "I Play Rocky"
    ],
@@ -236,10 +329,10 @@
   },
   "Jimmy": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Jimmy"
    ],
@@ -250,10 +343,10 @@
   },
   "LA BOLA NEGRA": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "La Bola Negra",
     "La bola negra"
@@ -264,12 +357,28 @@
    ],
    "tmdb": true
   },
-  "The Cat in the Hat": {
+  "Paper Tiger": {
    "anomalies": [],
    "days": 1,
+   "first": "2026-11-23",
+   "label": "",
+   "last": "2026-11-23",
+   "raws": [
+    "Paper Tiger"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "The Cat in the Hat": {
+   "anomalies": [],
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "The Cat in the Hat"
    ],
@@ -311,10 +420,10 @@
   },
   "The Host": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "Re-release",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "The Host - 4K"
    ],
@@ -325,10 +434,10 @@
   },
   "The Hunger Games: Sunrise on the Reaping": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "The Hunger Games: Sunrise On The Reaping",
     "The Hunger Games: Sunrise on the Reaping",
@@ -345,10 +454,10 @@
   },
   "The Only Living Pickpocket in New York": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "The Only Living Pickpocket in New York"
    ],
@@ -359,10 +468,10 @@
   },
   "The World's End": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "Re-release 2013",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "The World's End"
    ],
@@ -373,10 +482,10 @@
   },
   "Wicker": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Wicker"
    ],
@@ -387,10 +496,10 @@
   },
   "Wild Horse Nine": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Wild Horse Nine"
    ],
@@ -405,10 +514,10 @@
   },
   "Wildwood": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "Wildwood"
    ],
@@ -434,10 +543,10 @@
   },
   "You Can See Everything": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-22",
+   "last": "2026-11-23",
    "raws": [
     "You Can See Everything"
    ],
@@ -450,5 +559,5 @@
    "tmdb": true
   }
  },
- "updated": "2026-11-22"
+ "updated": "2026-11-23"
 }
