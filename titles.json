@@ -1,0 +1,454 @@
+{
+ "note": "Built by merge_titles.py from the daily build; each key is a card title.",
+ "titles": {
+  "A Beautiful Mind": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release 2001",
+   "last": "2026-11-22",
+   "raws": [
+    "A Beautiful Mind - 25th Anniversary",
+    "A Beautiful Mind 25th Anniversary "
+   ],
+   "theaters": [
+    "cinemark",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Aakasamlo Oka Tara": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Aakasamlo Oka Tara"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Being Heumann": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Being Heumann"
+   ],
+   "theaters": [
+    "festival"
+   ],
+   "tmdb": true
+  },
+  "Clayface": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Clayface"
+   ],
+   "theaters": [
+    "laquinta"
+   ],
+   "tmdb": true
+  },
+  "Club Kid": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Club Kid"
+   ],
+   "theaters": [
+    "cinemark"
+   ],
+   "tmdb": true
+  },
+  "Doctor Who: The Satan Pit": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Event",
+   "last": "2026-11-22",
+   "raws": [
+    "Doctor Who: The Satan Pit"
+   ],
+   "theaters": [
+    "cinemark",
+    "pickford"
+   ],
+   "tmdb": true
+  },
+  "Drummer Boy": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Drummer Boy"
+   ],
+   "theaters": [
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "ENE Repeat": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "ENE Repeat"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Ebenezer": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Ebenezer"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Fjord": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Fjord"
+   ],
+   "theaters": [
+    "festival"
+   ],
+   "tmdb": true
+  },
+  "Ghost Soldier": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Ghost Soldier"
+   ],
+   "theaters": [
+    "cinemark",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Giant": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "GIANT - The Play"
+   ],
+   "theaters": [
+    "cinemark"
+   ],
+   "tmdb": true
+  },
+  "Godzilla Minus Zero": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Godzilla Minus Zero",
+    "Godzilla Minus Zero (Japanese with English Subtitles)"
+   ],
+   "theaters": [
+    "cinemark",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "How to Rob a Bank": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "How to Rob a Bank"
+   ],
+   "theaters": [
+    "cinemark",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "I Play Rocky": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "I Play Rocky"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Jimmy": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Jimmy"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "LA BOLA NEGRA": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "La Bola Negra",
+    "La bola negra"
+   ],
+   "theaters": [
+    "festival",
+    "pickford"
+   ],
+   "tmdb": true
+  },
+  "The Cat in the Hat": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "The Cat in the Hat"
+   ],
+   "theaters": [
+    "cinemark",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "The Dark Crystal": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release 1982",
+   "last": "2026-11-22",
+   "raws": [
+    "The Dark Crystal"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "The Fast and the Furious: Tokyo Drift": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release 2006",
+   "last": "2026-11-22",
+   "raws": [
+    "The Fast and the Furious: Tokyo Drift"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "The Host": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release",
+   "last": "2026-11-22",
+   "raws": [
+    "The Host - 4K"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": false
+  },
+  "The Hunger Games: Sunrise on the Reaping": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "The Hunger Games: Sunrise On The Reaping",
+    "The Hunger Games: Sunrise on the Reaping",
+    "The Hunger Games: Sunrise on the Reaping - The IMAX Experience"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "The Only Living Pickpocket in New York": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "The Only Living Pickpocket in New York"
+   ],
+   "theaters": [
+    "pickford"
+   ],
+   "tmdb": true
+  },
+  "The World's End": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release 2013",
+   "last": "2026-11-22",
+   "raws": [
+    "The World's End"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Wicker": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Wicker"
+   ],
+   "theaters": [
+    "pickford"
+   ],
+   "tmdb": true
+  },
+  "Wild Horse Nine": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Wild Horse Nine"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "laquinta",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Wildwood": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "Wildwood"
+   ],
+   "theaters": [
+    "cinemark",
+    "regal"
+   ],
+   "tmdb": true
+  },
+  "Women on the Verge of a Nervous Breakdown": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "Re-release 1988",
+   "last": "2026-11-22",
+   "raws": [
+    "Women on the Verge of a Nervous Breakdown"
+   ],
+   "theaters": [
+    "festival"
+   ],
+   "tmdb": true
+  },
+  "You Can See Everything": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-22",
+   "label": "",
+   "last": "2026-11-22",
+   "raws": [
+    "You Can See Everything"
+   ],
+   "theaters": [
+    "cinemark",
+    "festival",
+    "pickford",
+    "regal"
+   ],
+   "tmdb": true
+  }
+ },
+ "updated": "2026-11-22"
+}
