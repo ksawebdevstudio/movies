@@ -309,6 +309,7 @@
    "theaters": [
     "cinemark",
     "laquinta",
+    "pickford",
     "regal"
    ],
    "tmdb": true
@@ -407,6 +408,7 @@
    "theaters": [
     "cinemark",
     "festival",
+    "pickford",
     "regal"
    ],
    "tmdb": true
