@@ -25,9 +25,11 @@
    "label": "",
    "last": "2026-11-23",
    "raws": [
-    "Aakasamlo Oka Tara"
+    "Aakasamlo Oka Tara",
+    "Aakasamlo Oka Tara (Telugu with English Subtitles)"
    ],
    "theaters": [
+    "cinemark",
     "regal"
    ],
    "tmdb": true
@@ -272,6 +274,7 @@
    ],
    "theaters": [
     "cinemark",
+    "laquinta",
     "regal"
    ],
    "tmdb": true
