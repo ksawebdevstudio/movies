@@ -23,7 +23,7 @@ jobs:
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
@@ -47,7 +47,19 @@ jobs:
         with:
           path: site
 
+      # GitHub sometimes lists the just-uploaded artifact late ("Found 0 artifact(s)")
+      # or is busy with another deployment. One failed attempt must not break the run:
+      # wait a minute and try once more. Only if the retry fails too is the run red.
       - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5
+
+      - name: Wait before retrying the deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 60
+
+      - id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5
 
       # Runs last, even if something above failed. The page is already published;
