@@ -20,10 +20,10 @@
   },
   "Aakasamlo Oka Tara": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Aakasamlo Oka Tara",
     "Aakasamlo Oka Tara (Telugu with English Subtitles)"
@@ -50,10 +50,10 @@
   },
   "Bitter Christmas": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Bitter Christmas"
    ],
@@ -93,10 +93,10 @@
   },
   "Club Kid": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Club Kid"
    ],
@@ -109,10 +109,10 @@
   },
   "Cowboys & Aliens": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-24",
    "label": "Re-release 2011",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Cowboys & Aliens"
    ],
@@ -125,10 +125,10 @@
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Disney's Hexed"
    ],
@@ -170,10 +170,10 @@
   },
   "ENE Repeat": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "ENE Repeat"
    ],
@@ -184,10 +184,10 @@
   },
   "Ebenezer": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Ebenezer"
    ],
@@ -202,10 +202,10 @@
   },
   "Elsinore": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Elsinore"
    ],
@@ -231,10 +231,10 @@
   },
   "Focker In-Law": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-24",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Focker In Law",
     "Focker In-Law"
@@ -250,10 +250,10 @@
   },
   "Ghost Soldier": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Ghost Soldier"
    ],
@@ -299,10 +299,10 @@
   },
   "Hershey": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Hershey"
    ],
@@ -318,10 +318,10 @@
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Hexed"
    ],
@@ -333,10 +333,10 @@
   },
   "How to Rob a Bank": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "How to Rob a Bank"
    ],
@@ -348,12 +348,26 @@
    ],
    "tmdb": true
   },
+  "Howard the Duck": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-25",
+   "label": "Re-release 1986",
+   "last": "2026-11-25",
+   "raws": [
+    "Howard the Duck"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
   "I Play Rocky": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "I Play Rocky"
    ],
@@ -382,10 +396,10 @@
   },
   "LA BOLA NEGRA": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "La Bola Negra",
     "La bola negra"
@@ -398,10 +412,10 @@
   },
   "Paper Tiger": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Paper Tiger"
    ],
@@ -415,10 +429,10 @@
   },
   "The Cat in the Hat": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "The Cat in the Hat"
    ],
@@ -474,10 +488,10 @@
   },
   "The Hunger Games: Sunrise on the Reaping": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "The Hunger Games: Sunrise On The Reaping",
     "The Hunger Games: Sunrise on the Reaping",
@@ -536,10 +550,10 @@
   },
   "Wild Horse Nine": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "Wild Horse Nine"
    ],
@@ -583,10 +597,10 @@
   },
   "You Can See Everything": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-25",
    "raws": [
     "You Can See Everything"
    ],
@@ -599,5 +613,5 @@
    "tmdb": true
   }
  },
- "updated": "2026-11-24"
+ "updated": "2026-11-25"
 }
