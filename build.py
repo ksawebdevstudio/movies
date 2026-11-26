@@ -106,6 +106,8 @@ DPLACE_BASE = "https://www.dplaceentertainment.com"
 # ".goatcounter.com"). While it is empty the page has no statistics script and sends nothing anywhere.
 GOATCOUNTER_CODE = "geniusgorilla"
 SITE_URL = "https://ksawebdevstudio.github.io/movies/"   # canonical address of the page
+QR_FOR = "https://ksawebdevstudio.github.io/movies/"   # the address the QR code below encodes; if SITE_URL changes, regenerate QR_SVG (segno, error level M)
+QR_SVG = '<svg viewBox="0 0 29 29" aria-hidden="true" focusable="false" shape-rendering="crispEdges"><path stroke="#000" d="M0 0.5h7m3 0h1m1 0h1m2 0h1m1 0h3m2 0h7m-29 1h1m5 0h1m1 0h2m1 0h2m1 0h3m1 0h3m1 0h1m5 0h1m-29 1h1m1 0h3m1 0h1m3 0h1m3 0h2m4 0h1m1 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m3 0h1m1 0h1m1 0h1m7 0h1m1 0h3m1 0h1m-29 1h1m1 0h3m1 0h1m1 0h2m3 0h3m1 0h3m2 0h1m1 0h3m1 0h1m-29 1h1m5 0h1m4 0h1m1 0h1m1 0h2m1 0h2m2 0h1m5 0h1m-29 1h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7m-20 1h1m3 0h5m1 0h2m-21 1h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h3m2 0h1m3 0h1m2 0h1m-28 1h1m2 0h2m2 0h2m1 0h1m1 0h2m2 0h2m2 0h3m2 0h1m2 0h1m-29 1h3m1 0h9m4 0h1m3 0h3m2 0h3m-29 1h1m1 0h2m9 0h2m1 0h5m6 0h1m-28 1h1m2 0h1m2 0h1m2 0h1m1 0h1m1 0h1m1 0h3m3 0h3m1 0h1m1 0h2m-28 1h2m2 0h1m2 0h1m1 0h5m5 0h3m2 0h1m2 0h1m-25 1h1m1 0h2m1 0h2m1 0h3m3 0h1m1 0h1m1 0h4m1 0h2m-27 1h4m1 0h2m1 0h2m1 0h2m1 0h8m1 0h1m1 0h1m-28 1h1m1 0h2m2 0h2m3 0h1m1 0h5m3 0h2m2 0h1m1 0h2m-27 1h3m2 0h1m2 0h1m5 0h3m1 0h3m2 0h2m1 0h1m-29 1h1m1 0h1m1 0h1m1 0h1m1 0h1m3 0h2m7 0h3m3 0h2m-28 1h1m2 0h1m2 0h4m1 0h4m1 0h1m3 0h1m1 0h1m1 0h1m1 0h1m-28 1h1m1 0h1m2 0h3m1 0h1m1 0h1m2 0h4m2 0h5m-17 1h2m2 0h2m2 0h1m3 0h1m3 0h1m1 0h3m-29 1h7m7 0h1m1 0h1m1 0h3m1 0h1m1 0h2m1 0h2m-29 1h1m5 0h1m2 0h3m1 0h1m2 0h2m2 0h1m3 0h2m-26 1h1m1 0h3m1 0h1m1 0h1m5 0h4m2 0h5m-25 1h1m1 0h3m1 0h1m2 0h1m1 0h1m1 0h1m3 0h4m3 0h1m1 0h3m-29 1h1m1 0h3m1 0h1m1 0h2m2 0h1m1 0h1m1 0h1m2 0h2m2 0h3m2 0h1m-29 1h1m5 0h1m3 0h2m1 0h2m2 0h2m1 0h1m3 0h1m2 0h1m-28 1h7m1 0h2m2 0h1m3 0h2m1 0h4m4 0h2"/></svg>'
 GSC_VERIFY = ""    # Google Search Console "HTML tag" token (content value only); empty = no tag
 GSC_VERIFY_FILE = "google4b07d58ef1fdd6e8.html"   # Search Console file verification, served next to index.html
 BING_VERIFY = ""   # Bing Webmaster Tools msvalidate.01 token; empty = no tag
@@ -874,9 +876,12 @@ h1{margin:8px 0 0;font-size:1.6rem} h2{margin:26px 0 12px;font-size:1.2rem} h2 .
 .sub{color:var(--mut);font-size:.9rem}
 /* page title as a quiet background element: centered, small, spaced, faded; date/update line muted below it */
 header{text-align:center;padding-bottom:0}
-header h1{font-size:1.05rem;font-weight:600;letter-spacing:.32em;text-transform:uppercase;opacity:.38;margin:4px 0 0;padding-left:.32em}
-header .sub{font-size:.78rem;opacity:.8;margin-top:9px}
-header h1 .reg{display:block;font-size:.78rem;letter-spacing:.16em;margin-top:0;line-height:1.25;opacity:1;padding-left:.16em}
+/* two-line title close to the golden ratio: 1.4rem : .87rem = 1.609 (22px / 14px); 12px to the date line. Chosen 11/25/2026 in the live preview */
+header h1{font-size:1.4rem;font-weight:600;letter-spacing:.3em;text-transform:uppercase;opacity:.48;margin:6px 0 0;padding-left:.3em;line-height:1.3}
+header .sub{font-size:.78rem;opacity:.8;margin-top:12px}
+header h1 .reg{display:block;font-size:.87rem;letter-spacing:.16em;margin-top:2px;line-height:1.25;opacity:1;padding-left:.16em}
+/* iOS home-screen app: the top edge of the web view fades under the status bar, which blurred the top of the title; start lower there */
+.ios-app header{padding-top:44px}
 main > h2:first-child{margin-top:12px}
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
@@ -1014,6 +1019,22 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sstatus{font-size:.8rem;color:var(--acc);font-weight:600;margin-top:4px}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
 .snext{font-size:.85rem;font-weight:600;margin-top:8px;padding:6px 10px;border-radius:8px;background:var(--chip);display:inline-block}
+header{position:relative}
+/* share button: 5th segment of the view switcher, after the location pin, with its own divider */
+.mode .shbtn{position:relative;width:38px;height:30px;margin-left:5px;border-radius:999px;border:0;padding:0;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.mode .shbtn::before{content:"";position:absolute;left:-4px;top:7px;bottom:7px;width:1px;background:var(--cline)}
+.shbtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.shbtn:focus-visible,.shr-btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media (hover:hover){.shbtn:hover{color:var(--fg)}}
+.shr{text-align:center;padding-top:6px}
+.shr-h{font-size:1.05rem;font-weight:600;margin:0 0 14px}
+.shr-btn{display:block;width:100%;font:inherit;font-weight:600;border:0;border-radius:12px;padding:13px 14px;margin:0 0 10px;background:var(--chip);color:var(--fg);cursor:pointer}
+.shr-main{background:var(--acc);color:#fff}
+.shr-btn:active{transform:scale(.98)}
+.shr-qr{width:min(230px,70vw);margin:16px auto 8px;padding:14px;background:#fff;border-radius:14px;line-height:0}
+.shr-qr svg{width:100%;height:auto;display:block}
+.shr-cap{font-size:.78rem;color:var(--mut);margin:0}
+.shr-url{font-size:.78rem;color:var(--mut);margin:6px 0 0;word-break:break-all;-webkit-user-select:text;user-select:text}
 .snote{font-size:.75rem;color:var(--mut);margin:12px 2px 0}
 .theaters{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 14px}
 @media (max-width:980px){.theaters{grid-template-columns:repeat(2,1fr)}}
@@ -1207,7 +1228,7 @@ JS = """
   if(!navigator.geolocation) ev('geo/unsupported','Location not supported',true);
   /* the popup with the full schedule opened */
   var sh=document.getElementById('sheet');
-  if(sh && window.MutationObserver) new MutationObserver(function(){ if(!sh.hidden) ev('popup/open','Schedule popup opened'); }).observe(sh,{attributes:true,attributeFilter:['hidden']});
+  if(sh && window.MutationObserver) new MutationObserver(function(){ if(!sh.hidden && sh.dataset.kind!=='share') ev('popup/open','Schedule popup opened'); }).observe(sh,{attributes:true,attributeFilter:['hidden']});
   /* clicks: theater link, ticket link, which showtime and format, and which place in the list (nearest first) */
   var laTime=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',hourCycle:'h23'});
   function nowMin(){ var p=laTime.formatToParts(new Date()), h=0, m=0; p.forEach(function(x){ if(x.type==='hour') h=+x.value%24; if(x.type==='minute') m=+x.value; }); return h*60+m; }
@@ -1358,6 +1379,7 @@ JS = """
     requestAnimationFrame(function(){ z.classList.add('on'); }); x.focus();
   }
   function open(card){
+    sheet.dataset.kind='';
     sb.innerHTML='';
     var head=el('div','shead'), pv=card.querySelector(':scope > img, :scope > .poster');
     if(pv){
@@ -1407,9 +1429,36 @@ JS = """
     sb.scrollTop=0; more();
     [].forEach.call(sb.querySelectorAll('img'), function(im){ if(!im.complete) im.addEventListener('load', more); });
   }
+  /* Share: the system share menu where the browser has one (iOS and Android, also from the home screen), copy link, and a QR code for someone standing next to you */
+  var SHARE={title:'In Theaters \u00b7 Coachella Valley', text:'Movie showtimes at Coachella Valley theaters', url:"https://ksawebdevstudio.github.io/movies/"};
+  function track(p,t){ try{ if(window.__ev) window.__ev(p,t); }catch(e){} }
+  function copyText(txt,done){
+    function fallback(){
+      try{ var ta=document.createElement('textarea'); ta.value=txt; ta.setAttribute('readonly',''); ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,txt.length); var ok=document.execCommand('copy'); ta.remove(); done(ok); }catch(e){ done(false); }
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ done(true); },fallback); else fallback();
+  }
+  function openShare(){
+    sheet.dataset.kind='share'; zoomOut(); sb.textContent='';
+    var w=el('div','shr'); w.appendChild(el('h2','shr-h','Share this page'));
+    if(navigator.share){ var b=el('button','shr-btn shr-main','Share\u2026'); b.type='button'; b.dataset.act='share'; w.appendChild(b); }
+    var c=el('button','shr-btn','Copy link'); c.type='button'; c.dataset.act='copy'; w.appendChild(c);
+    var q=el('div','shr-qr'); var tp=document.getElementById('qrtpl'); if(tp) q.appendChild(tp.content.cloneNode(true)); w.appendChild(q);
+    w.appendChild(el('p','shr-cap','Scan with a phone camera to open this page'));
+    w.appendChild(el('p','shr-url',SHARE.url));
+    sb.appendChild(w); sheet.hidden=false; document.documentElement.style.overflow='hidden'; sb.scrollTop=0; more();
+    track('share/open','Share sheet opened');
+  }
+  function shareAct(btn){
+    if(btn.dataset.act==='share'){ track('share/native','Share: system menu'); try{ navigator.share(SHARE).catch(function(){}); }catch(e){} return; }
+    copyText(SHARE.url,function(ok){ track('share/copy','Share: link copied'); btn.textContent=ok?'Copied \u2713':'Press and hold the link below to copy'; setTimeout(function(){ btn.textContent='Copy link'; },2200); });
+  }
   function close(){ zoomOut(); sheet.hidden=true; document.documentElement.style.overflow=''; }
   document.addEventListener('click',function(e){
     if(e.target.closest('.sheet-bg, .sheet-x')){ close(); return; }
+    if(e.target.closest('#share')){ openShare(); return; }
+    var sa=e.target.closest('.shr-btn[data-act]'); if(sa){ shareAct(sa); return; }
     var bt=e.target.closest('.t[data-buy], .c[data-buy]');   /* a showtime with its own ticket link */
     if(bt && !bt.classList.contains('past') && /^https:[/][/]/i.test(bt.dataset.buy)){ e.preventDefault(); window.open(bt.dataset.buy,'_blank','noopener'); return; }
     if(e.target.closest('a')) return;            /* theater block: follow the link */
@@ -1806,7 +1855,7 @@ def theater_page(key, movies, today, tomorrow, tmrw_ok):
     tm = (f'<h2>Tomorrow <span class="sub">&middot; {nice_tmrw}</span></h2><div class="tlist d1">{tmrw_html}</div>'
           if tmrw_html else "")
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8"><script>if(navigator.standalone)document.documentElement.classList.add("ios-app")</script>
 <meta http-equiv="Content-Security-Policy" content="base-uri 'none'; object-src 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{a(title)}</title>
@@ -1865,7 +1914,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
         f'<a class="tpage" href="{THEATER_SLUG[k]}/">Showtimes today &rsaquo;</a></div>'
         for k, n in THEATERS)
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8"><script>if(navigator.standalone)document.documentElement.classList.add("ios-app")</script>
 <meta http-equiv="Content-Security-Policy" content="base-uri 'none'; object-src 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {seo_head(today)}
@@ -1878,7 +1927,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <link rel="preconnect" href="https://image.tmdb.org">
 <style>{CSS}</style></head>
 <body class="sig-label" data-geo='{json.dumps(THEATER_GEO)}' data-d0="{today}" data-d1="{tomorrow}" data-d1nice="{nice_tmrw}" data-tmrw-ok="{','.join(tmrw_ok)}" data-nth="{len(THEATERS)}">
-<header><h1>In Theaters<span class="reg">Coachella Valley</span></h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button><button type="button" class="gpin" id="geo" aria-pressed="false" aria-label="Nearest theaters first" title="Nearest theaters first"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
+<header><h1>In Theaters<span class="reg">Coachella Valley</span></h1><div class="sub"><span id="daylabel">Today, {nice_today}</span> &middot; updated {updated}</div><div class="mode" id="mode" role="group" aria-label="View"><button type="button" data-m="cards" aria-pressed="true" aria-label="Showtimes" title="Showtimes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button><button type="button" data-m="posters" aria-pressed="false" aria-label="Posters" title="Posters"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M4 17l5-5 4 4 3-3 4 4"/></svg></button><button type="button" data-m="list" aria-pressed="false" aria-label="List" title="List"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button><button type="button" class="gpin" id="geo" aria-pressed="false" aria-label="Nearest theaters first" title="Nearest theaters first"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button><button type="button" class="shbtn" id="share" aria-label="Share this page" title="Share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg></button></div><div class="modecap" id="modecap">Showtimes</div></header>
 {warn}
 <div class="notice" id="stale" hidden>These showtimes may be out of date (last updated {updated}). The page refreshes several times a day.</div>
 <main>
@@ -1905,6 +1954,7 @@ def render(movies, soon, today, warnings, tomorrow, tmrw_ok):
 <div class="c2">Need a website or tech help? <a href="mailto:genius.gorilla.it@gmail.com">genius.gorilla.it@gmail.com</a></div>
 <a class="cbtn" href="mailto:genius.gorilla.it@gmail.com?subject=Website%20%2F%20IT%20help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Email me</a></div>
 </footer>
+<template id="qrtpl">{QR_SVG}</template>
 <div id="sheet" hidden><div class="sheet-bg"></div><div class="sheet-box" role="dialog" aria-modal="true">
 <button class="sheet-x" aria-label="Close"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg></button><div class="sheet-body"></div></div></div>
 {gc_tag}<script>{JS}</script>
@@ -2254,6 +2304,8 @@ def main():
         if not soon:
             problems.append("TMDB: the 'Coming soon' list is empty")
 
+    if QR_FOR != SITE_URL:
+        problems.append("The QR code on the share sheet encodes an old address - regenerate QR_SVG for SITE_URL")
     anomalies = find_anomalies(movies, use_tmdb)
     write_anomalies(anomalies)
     write_titles_today(movies, anomalies, today)
