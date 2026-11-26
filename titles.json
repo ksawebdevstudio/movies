@@ -20,10 +20,10 @@
   },
   "Aakasamlo Oka Tara": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Aakasamlo Oka Tara",
     "Aakasamlo Oka Tara (Telugu with English Subtitles)"
@@ -50,10 +50,10 @@
   },
   "Bitter Christmas": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Bitter Christmas"
    ],
@@ -93,17 +93,18 @@
   },
   "Club Kid": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Club Kid"
    ],
    "theaters": [
     "cinemark",
     "festival",
-    "pickford"
+    "pickford",
+    "regal"
    ],
    "tmdb": true
   },
@@ -125,10 +126,10 @@
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Disney's Hexed"
    ],
@@ -170,10 +171,10 @@
   },
   "ENE Repeat": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "ENE Repeat"
    ],
@@ -184,10 +185,10 @@
   },
   "Ebenezer": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Ebenezer"
    ],
@@ -200,12 +201,26 @@
    ],
    "tmdb": true
   },
+  "Elf": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-26",
+   "label": "Re-release 2003",
+   "last": "2026-11-26",
+   "raws": [
+    "Elf"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
   "Elsinore": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Elsinore"
    ],
@@ -231,10 +246,10 @@
   },
   "Focker In-Law": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-24",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Focker In Law",
     "Focker In-Law"
@@ -250,10 +265,10 @@
   },
   "Ghost Soldier": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Ghost Soldier"
    ],
@@ -297,12 +312,26 @@
    ],
    "tmdb": true
   },
+  "Gremlins 2: The New Batch": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-26",
+   "label": "Re-release 1990",
+   "last": "2026-11-26",
+   "raws": [
+    "Gremlins 2: The New Batch"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true
+  },
   "Hershey": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Hershey"
    ],
@@ -318,10 +347,10 @@
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Hexed"
    ],
@@ -333,10 +362,10 @@
   },
   "How to Rob a Bank": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "How to Rob a Bank"
    ],
@@ -350,10 +379,10 @@
   },
   "Howard the Duck": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-25",
    "label": "Re-release 1986",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Howard the Duck"
    ],
@@ -364,10 +393,10 @@
   },
   "I Play Rocky": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "I Play Rocky"
    ],
@@ -382,10 +411,10 @@
   },
   "Jimmy": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-24",
+   "last": "2026-11-26",
    "raws": [
     "Jimmy"
    ],
@@ -396,10 +425,10 @@
   },
   "LA BOLA NEGRA": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "La Bola Negra",
     "La bola negra"
@@ -412,10 +441,10 @@
   },
   "Paper Tiger": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Paper Tiger"
    ],
@@ -429,10 +458,10 @@
   },
   "The Cat in the Hat": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "The Cat in the Hat"
    ],
@@ -488,10 +517,10 @@
   },
   "The Hunger Games: Sunrise on the Reaping": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "The Hunger Games: Sunrise On The Reaping",
     "The Hunger Games: Sunrise on the Reaping",
@@ -517,6 +546,20 @@
    ],
    "theaters": [
     "pickford"
+   ],
+   "tmdb": true
+  },
+  "The Polar Express": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-26",
+   "label": "Re-release 2004",
+   "last": "2026-11-26",
+   "raws": [
+    "The Polar Express"
+   ],
+   "theaters": [
+    "regal"
    ],
    "tmdb": true
   },
@@ -550,10 +593,10 @@
   },
   "Wild Horse Nine": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "Wild Horse Nine"
    ],
@@ -597,10 +640,10 @@
   },
   "You Can See Everything": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-25",
+   "last": "2026-11-26",
    "raws": [
     "You Can See Everything"
    ],
@@ -613,5 +656,5 @@
    "tmdb": true
   }
  },
- "updated": "2026-11-25"
+ "updated": "2026-11-26"
 }
