@@ -881,7 +881,7 @@ header h1{font-size:1.4rem;font-weight:600;letter-spacing:.3em;text-transform:up
 header .sub{font-size:.78rem;opacity:.8;margin-top:12px}
 header h1 .reg{display:block;font-size:.87rem;letter-spacing:.16em;margin-top:2px;line-height:1.25;opacity:1;padding-left:.16em}
 /* iOS home-screen app: the top edge of the web view fades under the status bar, which blurred the top of the title; start lower there */
-.ios-app header{padding-top:44px}
+.ios-app header{padding-top:40px}
 main > h2:first-child{margin-top:12px}
 .notice{max-width:1100px;margin:8px auto;padding:8px 14px;border-radius:8px;background:var(--chip);color:var(--fg);font-size:.85rem;border-left:4px solid var(--acc)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
