@@ -1097,6 +1097,16 @@ header{position:relative}
 .sth .c{background:rgba(255,255,255,.07);color:var(--fg)}
 @media (prefers-color-scheme:light){.sth .c{background:rgba(255,255,255,.85);color:#15171c}}
 .sth .c.past{opacity:.45}
+/* past showtimes folded behind one chip (same rule as on the cards) */
+.sth .pw{display:none} .sth.open .pw{display:contents}
+.sth .eb{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:999px;border:1px dashed var(--mut);background:transparent;color:var(--mut);cursor:pointer;white-space:nowrap}
+.sth .eb .x2{display:none} .sth.open .eb .x1{display:none} .sth.open .eb .x2{display:inline}
+@media (hover:hover){.sth .eb:hover{color:var(--fg)}}
+/* "Next:" pill: the theater dot and its name never split; phones use the short names (the full ones do not fit next to the poster) */
+.snext .nt{white-space:nowrap}
+.snext .nd{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--tc,#888);opacity:.7;margin:0 5px 0 0;vertical-align:-1px}
+.snext .short,.sthn .short{display:none}
+@media (max-width:700px){.snext .full,.sthn .full{display:none} .snext .short,.sthn .short{display:inline}}
 .sth .sgrp.tm .c{background:transparent;border:1px dashed var(--tc,#888);border-color:color-mix(in srgb,var(--tc,#888) 55%,transparent)}
 .sth .sgrp.tm .c.imax{border:1px solid var(--acc)} .sth .sgrp.tm .c.fmt{border:1px solid var(--tc,#888)}
 @media (max-width:700px){
@@ -1379,12 +1389,19 @@ JS = """
   function el(tag,cls,txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
   function chips(group,label){
     var w=el('div','sgrp'+(label==='Tomorrow'?' tm':'')); w.appendChild(el('div','slab',label));
-    var box=el('div','schips');
+    var box=el('div','schips'), pastBox=el('span','pw');
     group.querySelectorAll('.t').forEach(function(t){
       var c=el('span','c'+(t.classList.contains('past')?' past':'')+(t.classList.contains('imax')?' imax':'')+(t.classList.contains('fmt')?' fmt':''));
       c.innerHTML=t.innerHTML; if(t.dataset.buy && !t.classList.contains('past')) c.dataset.buy=t.dataset.buy;
-      box.appendChild(c);
+      if(label==='Today' && t.classList.contains('past')) pastBox.appendChild(c); else box.appendChild(c);
     });
+    /* past showtimes: one "N earlier" chip (same rule as on the cards); the popup block is the <a class="sth">, the chip must not open the theater page */
+    if(pastBox.firstChild){
+      var eb=el('button','eb'); eb.type='button'; eb.setAttribute('aria-expanded','false');
+      eb.innerHTML='<span class="x1">'+pastBox.childNodes.length+' earlier \u203a</span><span class="x2">hide earlier \u2039</span>';
+      eb.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); var blk=eb.closest('.sth'); if(blk) eb.setAttribute('aria-expanded',blk.classList.toggle('open')?'true':'false'); });
+      box.insertBefore(pastBox,box.firstChild); box.insertBefore(eb,box.firstChild);
+    }
     w.appendChild(box); return w;
   }
   var tf=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
@@ -1440,20 +1457,25 @@ JS = """
         if(!p[0]) return;
         p[0].querySelectorAll('.t:not(.past)').forEach(function(t){
           var ts=+t.dataset.ts; if(ts<now) return;
-          if(!best || ts<best.ts) best={ts:ts, day:p[1], th:r.querySelector('.full').textContent};
+          if(!best || ts<best.ts) best={ts:ts, day:p[1], th:r.querySelector('.full').textContent, short:r.querySelector('.short').textContent, key:r.dataset.th};
         });
       });
     });
     if(best){
-      var nx=el('div','snext'), txt='Next: '+best.day+tf.format(new Date(best.ts*1000))+' \u00b7 '+best.th;
-      if(card.dataset.rt) txt+=' \u00b7 ends ~'+tf.format(new Date((best.ts+card.dataset.rt*60)*1000));
-      nx.textContent=txt; ht.appendChild(nx);
+      /* "Next: 9:10 PM <dot> Regal": the dot (theater colour, the same faded tone as a theater with no more showings) and the name stay together; phones show the short name */
+      var nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' '));
+      var nt=el('span','nt'), nd=el('span','nd'); nd.dataset.th=best.key; nt.appendChild(nd);
+      nt.appendChild(el('span','full',best.th)); nt.appendChild(el('span','short',best.short));
+      if(card.dataset.rt) nt.appendChild(document.createTextNode(','));      /* "Regal, ends ~11:20 PM": when the end time does not fit it moves to the next line as a whole */
+      nx.appendChild(nt);
+      if(card.dataset.rt){ nx.appendChild(document.createTextNode(' ')); nx.appendChild(el('span','nt','ends ~'+tf.format(new Date((best.ts+card.dataset.rt*60)*1000)))); }
+      ht.appendChild(nx);
     }
     head.appendChild(ht); sb.appendChild(head);
     card.querySelectorAll('.th').forEach(function(r){
       if(!r._today && !r._tmrw) return;
       var box=el('a','sth'); box.dataset.th=r.dataset.th; box.href=r.href; box.target='_blank'; box.rel='noopener';
-      var hd=el('div','sthn'); hd.appendChild(el('span',null,r.querySelector('.full').textContent));
+      var hd=el('div','sthn'), hn=el('span'); hn.appendChild(el('span','full',r.querySelector('.full').textContent)); hn.appendChild(el('span','short',r.querySelector('.short').textContent)); hd.appendChild(hn);
       hd.appendChild(el('i',null,'Open \u2197')); box.appendChild(hd);
       if(r._today) box.appendChild(chips(r._today,'Today'));
       if(r._tmrw) box.appendChild(chips(r._tmrw,'Tomorrow'));
