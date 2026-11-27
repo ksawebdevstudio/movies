@@ -1102,9 +1102,8 @@ header{position:relative}
 .sth .eb{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:999px;border:1px dashed var(--mut);background:transparent;color:var(--mut);cursor:pointer;white-space:nowrap}
 .sth .eb .x2{display:none} .sth.open .eb .x1{display:none} .sth.open .eb .x2{display:inline}
 @media (hover:hover){.sth .eb:hover{color:var(--fg)}}
-/* "Next:" pill: the theater dot and its name never split; phones use the short names (the full ones do not fit next to the poster) */
+/* "Next:" pill: the theater name never splits; phones use the short names (the full ones do not fit next to the poster) */
 .snext .nt{white-space:nowrap}
-.snext .nd{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--tc,#888);opacity:.7;margin:0 5px 0 0;vertical-align:-1px}
 .snext .short,.sthn .short{display:none}
 @media (max-width:700px){.snext .full,.sthn .full{display:none} .snext .short,.sthn .short{display:inline}}
 .sth .sgrp.tm .c{background:transparent;border:1px dashed var(--tc,#888);border-color:color-mix(in srgb,var(--tc,#888) 55%,transparent)}
@@ -1462,13 +1461,9 @@ JS = """
       });
     });
     if(best){
-      /* "Next: 9:10 PM <dot> Regal": the dot (theater colour, the same faded tone as a theater with no more showings) and the name stay together; phones show the short name */
-      var nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' '));
-      var nt=el('span','nt'), nd=el('span','nd'); nd.dataset.th=best.key; nt.appendChild(nd);
-      nt.appendChild(el('span','full',best.th)); nt.appendChild(el('span','short',best.short));
-      if(card.dataset.rt) nt.appendChild(document.createTextNode(','));      /* "Regal, ends ~11:20 PM": when the end time does not fit it moves to the next line as a whole */
-      nx.appendChild(nt);
-      if(card.dataset.rt){ nx.appendChild(document.createTextNode(' ')); nx.appendChild(el('span','nt','ends ~'+tf.format(new Date((best.ts+card.dataset.rt*60)*1000)))); }
+      /* "Next: 9:10 PM \u00b7 Regal": the name never splits across lines; phones show the short name (the full ones do not fit next to the poster) */
+      var nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' \u00b7 '));
+      var nt=el('span','nt'); nt.appendChild(el('span','full',best.th)); nt.appendChild(el('span','short',best.short)); nx.appendChild(nt);
       ht.appendChild(nx);
     }
     head.appendChild(ht); sb.appendChild(head);
