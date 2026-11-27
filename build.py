@@ -1049,7 +1049,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sstatus{font-size:.8rem;color:var(--acc);font-weight:600;margin-top:4px}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
 /* "Next:" pill: on a wide screen it sits beside the poster and ends exactly at the poster's bottom edge; on phones it goes under the header, full width, centered */
-.shead > .snext{grid-column:2;grid-row:2;align-self:end;justify-self:start;font-size:.85rem;font-weight:600;padding:6px 10px;border-radius:8px;background:var(--chip);max-width:100%}
+.shead > .snext{grid-column:2;grid-row:2;align-self:end;justify-self:start;font-size:.82rem;font-weight:500;padding:6px 10px;border-radius:8px;max-width:100%;
+  color:color-mix(in srgb,var(--fg) 72%,var(--card));background:color-mix(in srgb,var(--chip) 55%,var(--card))}   /* a quiet hint, not a button */
 header{position:relative}
 /* share button: 5th segment of the view switcher, after the location pin, with its own divider */
 .mode .shbtn{position:relative;width:38px;height:30px;margin-left:5px;border-radius:999px;border:0;padding:0;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -1109,6 +1110,12 @@ header{position:relative}
 .snext .nt{white-space:nowrap}
 .sthn .short{display:none}
 @media (max-width:700px){.sthn .full{display:none} .sthn .short{display:inline}}
+.sth.fin{padding:8px 12px;opacity:.8}
+.sth.fin .sthn .eb{margin-left:auto;padding:3px 10px;font-size:.78rem}
+.sth.fin .sthn .sdist{margin-left:auto;align-self:center;padding:0 8px 0 0}
+.sth.fin .sthn .sdist+.eb{margin-left:0}
+.sth.fin .fx{display:none;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sth.fin.open .fx{display:flex}
 .sth .sgrp.tm .c{background:transparent;border:1px dashed var(--tc,#888);border-color:color-mix(in srgb,var(--tc,#888) 55%,transparent)}
 .sth .sgrp.tm .c.imax{border:1px solid var(--acc)} .sth .sgrp.tm .c.fmt{border:1px solid var(--tc,#888)}
 @media (max-width:700px){
@@ -1450,7 +1457,7 @@ JS = """
       }
     }
     var ht=el('div','stitle'); ht.appendChild(el('h3',null,card.querySelector('h3').textContent));
-    ht.appendChild(card.querySelector('.meta').cloneNode(true));
+    var mt=card.querySelector('.meta'); if(mt && !mt.querySelector('.rating.none')) ht.appendChild(mt.cloneNode(true));   /* no empty "No ratings yet" line in the popup */
     var info=[card.dataset.genre, card.dataset.rt ? dur(card.dataset.rt) : ''].filter(Boolean).join(' \u00b7 ');
     if(info) ht.appendChild(el('div','sinfo',info));
     var st=card.querySelector('.status'); if(st && !st.hidden) ht.appendChild(el('div','sstatus',st.textContent));
@@ -1461,22 +1468,40 @@ JS = """
         if(!p[0]) return;
         p[0].querySelectorAll('.t:not(.past)').forEach(function(t){
           var ts=+t.dataset.ts; if(ts<now) return;
-          if(!best || ts<best.ts) best={ts:ts, day:p[1], nn:r.dataset.nn};
+          if(!best || ts<best.ts) best={ts:ts, day:p[1], nn:r.dataset.nn, r:r};
         });
       });
     });
+    /* "Next" is a hint, not a choice: only when the nearest showing is NOT in the first block that has showings (then it saves a search)
+       and there are more than 4 showings to pick from (a short list reads at a glance). The day it looks at: today's upcoming, else tomorrow's. */
+    var rows=[].slice.call(card.querySelectorAll('.th')).filter(function(r){ return r._today || r._tmrw; });
+    function upN(r){ return r._today ? [].filter.call(r._today.querySelectorAll('.t:not(.past)'),function(t){ return +t.dataset.ts>=now; }).length : 0; }
+    function tmN(r){ return r._tmrw ? r._tmrw.querySelectorAll('.t').length : 0; }
+    var todayUp=rows.reduce(function(n,r){ return n+upN(r); },0), cnt=todayUp ? todayUp : rows.reduce(function(n,r){ return n+tmN(r); },0);
+    var firstRow=null; rows.forEach(function(r){ if(!firstRow && (todayUp ? upN(r) : tmN(r))) firstRow=r; });
     var nx=null;
-    if(best){
+    if(best && best.r!==firstRow && cnt>4){
       /* "Next: Sat 11:30 AM \u00b7 Regal Rancho Mirage": one set of names, the name never splits across lines; tomorrow is shown as a weekday */
       nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' \u00b7 '));
       nx.appendChild(el('span','nt',best.nn));
     }
     head.appendChild(ht); if(nx) head.appendChild(nx); sb.appendChild(head);
-    card.querySelectorAll('.th').forEach(function(r){
-      if(!r._today && !r._tmrw) return;
+    /* a theater that is done for today and has nothing tomorrow: one compact row ("N earlier ›" opens the times), placed after the others */
+    function finished(r){ return !!r._today && !upN(r) && !r._tmrw; }
+    rows.filter(function(r){ return !finished(r); }).concat(rows.filter(finished)).forEach(function(r){
       var box=el('a','sth'); box.dataset.th=r.dataset.th; box.href=r.href; box.target='_blank'; box.rel='noopener';
       var hd=el('div','sthn'), hn=el('span'); hn.appendChild(el('span','full',r.querySelector('.full').textContent)); hn.appendChild(el('span','short',r.querySelector('.short').textContent)); hd.appendChild(hn);
-      hd.appendChild(el('i',null,'Open \u2197')); box.appendChild(hd);
+      if(finished(r)){
+        box.classList.add('fin'); var pastN=r._today.querySelectorAll('.t').length;
+        if(r.dataset.dist) hd.appendChild(el('span','sdist',r.dataset.dist));
+        var fb=el('button','eb'); fb.type='button'; fb.setAttribute('aria-expanded','false');
+        fb.innerHTML='<span class="x1">'+pastN+' earlier ›</span><span class="x2">hide ‹</span>';
+        fb.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); fb.setAttribute('aria-expanded',box.classList.toggle('open')?'true':'false'); });
+        hd.appendChild(fb); box.appendChild(hd);
+        var fx=el('div','fx'); r._today.querySelectorAll('.t').forEach(function(t){ var c=el('span','c past'+(t.classList.contains('imax')?' imax':'')+(t.classList.contains('fmt')?' fmt':'')); c.innerHTML=t.innerHTML; fx.appendChild(c); });
+        box.appendChild(fx); sb.appendChild(box); return;
+      }
+      hd.appendChild(el('i',null,'Open ↗')); box.appendChild(hd);
       if(r._today) box.appendChild(chips(r._today,'Today'));
       if(r._tmrw) box.appendChild(chips(r._tmrw,'Tomorrow'));
       if(r.dataset.dist){ var lc=box.querySelectorAll('.schips'); if(lc.length) lc[lc.length-1].appendChild(el('span','sdist',r.dataset.dist)); }
