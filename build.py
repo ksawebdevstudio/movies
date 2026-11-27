@@ -70,6 +70,7 @@ THEATER_NAMES = dict(THEATERS)
 THEATER_SLUG = {"festival": "festival-theaters", "pickford": "mary-pickford", "cinemark": "cinemark-rancho-mirage",
                 "regal": "regal-rancho-mirage", "laquinta": "cinemark-la-quinta"}   # page address /movies/<slug>/
 SHORT_NAMES = {"festival": "Festival", "cinemark": "Cinemark XD", "regal": "Regal", "pickford": "Mary Pickford", "laquinta": "La Quinta"}  # used on phones
+NEXT_NAMES = {"festival": "Festival Theaters", "cinemark": "Cinemark River XD", "regal": "Regal Rancho Mirage", "pickford": "Mary Pickford Theatre", "laquinta": "Cinemark La Quinta XD"}  # one set for the popup "Next:" pill (fits one line from 360px)
 # Where the "open showtimes" link goes when a theater could not be read.
 THEATER_URLS = {
     "festival": "https://festivaltheaters.com/buy-tickets/",
@@ -866,7 +867,7 @@ def now_card(g, i, d0, others=None):
                 lab = f'<span class="lab">{label}</span>' if label else ""
                 groups += f'<div class="times {"d0" if want_today else "d1"}">{lab}{chips}</div>'
         u1 = f' data-u1="{html.escape(url1)}"' if url1 else ""
-        rows += (f'<a class="th" data-th="{key}" href="{html.escape(url0 or url1)}"{u1} target="_blank" rel="noopener">'
+        rows += (f'<a class="th" data-th="{key}" data-nn="{html.escape(NEXT_NAMES[key])}" href="{html.escape(url0 or url1)}"{u1} target="_blank" rel="noopener">'
                  f'<span class="thn"><span class="full">{html.escape(name)}</span>'
                  f'<span class="short">{html.escape(SHORT_NAMES[key])}</span><i>&#8599;</i></span>{groups}</a>')
     rt = f' data-rt="{g["runtime"]}"' if g.get("runtime") else ""
@@ -1028,8 +1029,9 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .sheet-x{position:absolute;z-index:2;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;padding:0;
   display:flex;align-items:center;justify-content:center;background:var(--chip);color:var(--fg);cursor:pointer;box-shadow:0 0 0 2px var(--card),0 0 6px 4px var(--card)}
 .sheet-x svg{width:14px;height:14px;display:block}
-.shead{display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;padding-right:36px}
-.shead > img,.shead > .poster{width:92px;flex:none;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
+.shead{display:grid;grid-template-columns:auto 1fr;column-gap:14px;row-gap:8px;align-items:start;margin-bottom:12px}
+.shead > img,.shead > .poster{grid-column:1;grid-row:1 / span 2;width:108px;border-radius:8px;aspect-ratio:2/3;object-fit:cover;font-size:.7rem;padding:6px}
+.shead > .stitle{grid-column:2;grid-row:1;min-width:0;padding-right:36px}
 .shead > img{cursor:zoom-in;padding:0}   /* the 6px padding is for the text placeholder; on a photo it hid the rounded corners */
 /* tap the small poster in the popup: show it large */
 .zoom{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.82);
@@ -1046,7 +1048,8 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .stitle h3{font-size:1.15rem;margin:2px 0 4px}
 .sstatus{font-size:.8rem;color:var(--acc);font-weight:600;margin-top:4px}
 .sinfo{font-size:.82rem;color:var(--mut);margin-top:2px}
-.snext{font-size:.85rem;font-weight:600;margin-top:8px;padding:6px 10px;border-radius:8px;background:var(--chip);display:inline-block}
+/* "Next:" pill: on a wide screen it sits beside the poster and ends exactly at the poster's bottom edge; on phones it goes under the header, full width, centered */
+.shead > .snext{grid-column:2;grid-row:2;align-self:end;justify-self:start;font-size:.85rem;font-weight:600;padding:6px 10px;border-radius:8px;background:var(--chip);max-width:100%}
 header{position:relative}
 /* share button: 5th segment of the view switcher, after the location pin, with its own divider */
 .mode .shbtn{position:relative;width:38px;height:30px;margin-left:5px;border-radius:999px;border:0;padding:0;background:transparent;color:var(--mut);display:flex;align-items:center;justify-content:center;cursor:pointer}
@@ -1102,17 +1105,19 @@ header{position:relative}
 .sth .eb{font:inherit;font-size:.85rem;padding:4px 10px;border-radius:999px;border:1px dashed var(--mut);background:transparent;color:var(--mut);cursor:pointer;white-space:nowrap}
 .sth .eb .x2{display:none} .sth.open .eb .x1{display:none} .sth.open .eb .x2{display:inline}
 @media (hover:hover){.sth .eb:hover{color:var(--fg)}}
-/* "Next:" pill: the theater name never splits; phones use the short names (the full ones do not fit next to the poster) */
+/* "Next:" pill: the theater name never splits; block headers use the short names on phones */
 .snext .nt{white-space:nowrap}
-.snext .short,.sthn .short{display:none}
-@media (max-width:700px){.snext .full,.sthn .full{display:none} .snext .short,.sthn .short{display:inline}}
+.sthn .short{display:none}
+@media (max-width:700px){.sthn .full{display:none} .sthn .short{display:inline}}
 .sth .sgrp.tm .c{background:transparent;border:1px dashed var(--tc,#888);border-color:color-mix(in srgb,var(--tc,#888) 55%,transparent)}
 .sth .sgrp.tm .c.imax{border:1px solid var(--acc)} .sth .sgrp.tm .c.fmt{border:1px solid var(--tc,#888)}
 @media (max-width:700px){
   #sheet{align-items:flex-end;padding:0}
   .sheet-box{max-width:none;max-height:88vh;border-radius:18px 18px 0 0;border-bottom:0}
   .sheet-body{padding:16px 14px 24px}
-  .shead > img,.shead > .poster{width:76px}}
+  .shead{row-gap:12px}
+  .shead > img,.shead > .poster{grid-row:1;width:76px}
+  .shead > .snext{grid-column:1 / -1;grid-row:2;justify-self:stretch;text-align:center;padding:7px 11px;border-radius:10px}}
 /* "Now playing" cards keep their look; only the columns differ in height (masonry, laid out by the
    script; without it a normal grid is shown) */
 .grid.masonry{display:flex;gap:16px;align-items:flex-start}
@@ -1450,23 +1455,23 @@ JS = """
     if(info) ht.appendChild(el('div','sinfo',info));
     var st=card.querySelector('.status'); if(st && !st.hidden) ht.appendChild(el('div','sstatus',st.textContent));
     /* nearest upcoming showing across theaters */
-    var best=null;
+    var best=null, tmrwDay=new Intl.DateTimeFormat('en-US',{weekday:'short',timeZone:'UTC'}).format(new Date(document.body.dataset.d1+'T12:00:00Z'))+' ';
     card.querySelectorAll('.th').forEach(function(r){
-      [[r._today,''],[r._tmrw,'Tomorrow ']].forEach(function(p){
+      [[r._today,''],[r._tmrw,tmrwDay]].forEach(function(p){
         if(!p[0]) return;
         p[0].querySelectorAll('.t:not(.past)').forEach(function(t){
           var ts=+t.dataset.ts; if(ts<now) return;
-          if(!best || ts<best.ts) best={ts:ts, day:p[1], th:r.querySelector('.full').textContent, short:r.querySelector('.short').textContent, key:r.dataset.th};
+          if(!best || ts<best.ts) best={ts:ts, day:p[1], nn:r.dataset.nn};
         });
       });
     });
+    var nx=null;
     if(best){
-      /* "Next: 9:10 PM \u00b7 Regal": the name never splits across lines; phones show the short name (the full ones do not fit next to the poster) */
-      var nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' \u00b7 '));
-      var nt=el('span','nt'); nt.appendChild(el('span','full',best.th)); nt.appendChild(el('span','short',best.short)); nx.appendChild(nt);
-      ht.appendChild(nx);
+      /* "Next: Sat 11:30 AM \u00b7 Regal Rancho Mirage": one set of names, the name never splits across lines; tomorrow is shown as a weekday */
+      nx=el('div','snext'); nx.appendChild(document.createTextNode('Next: '+best.day+tf.format(new Date(best.ts*1000))+' \u00b7 '));
+      nx.appendChild(el('span','nt',best.nn));
     }
-    head.appendChild(ht); sb.appendChild(head);
+    head.appendChild(ht); if(nx) head.appendChild(nx); sb.appendChild(head);
     card.querySelectorAll('.th').forEach(function(r){
       if(!r._today && !r._tmrw) return;
       var box=el('a','sth'); box.dataset.th=r.dataset.th; box.href=r.href; box.target='_blank'; box.rel='noopener';
