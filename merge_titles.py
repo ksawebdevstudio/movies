@@ -25,6 +25,8 @@ def main(today_path, hist_path):
         for key in ("raws", "theaters", "anomalies"):
             e[key] = sorted(set(e[key]) | set(r[key]))
         e["tmdb"] = e["tmdb"] or r["tmdb"]
+        if r.get("tmdb_id"):       # the match as of the latest day (a wrong match shows up as an id that changes or a year that looks off)
+            e["tmdb_id"], e["year"] = r["tmdb_id"], r.get("year", "")
         e["label"] = r["label"] or e["label"]
     hist["updated"] = day
     hist["note"] = "Built by merge_titles.py from the daily build; each key is a card title."
