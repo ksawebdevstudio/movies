@@ -562,10 +562,10 @@ ANNIV_ANY = re.compile(r"\b\d+(?:st|nd|rd|th)\s+anniversary\b", re.I)
 
 
 def clean_title(t):
-    t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM)\s*:\s*", "", t.strip(), flags=re.I)
+    t = re.sub(r"^(IMAX|CUT\d+|DOLBY CINEMA|FATHOM|TCM|FLASHBACK CINEMA)\s*:\s*", "", t.strip(), flags=re.I)
     t = re.sub(r"\([^)]*\)", " ", t)
     suffix = (r"\s+-\s+(the imax experience|sensory friendly|open caption\w*|(english )?dubbed|(english )?subtitled|(\d{4}\s+)?re-?issue(\s+\d{4})?"
-              r"|early access.*|fan event.*)\s*$")
+              r"|early access.*|fan event.*|holiday movie clubhouse(?:\s+\d{4})?)\s*$")
     for _ in range(3):
         t = re.sub(suffix, "", t, flags=re.I)
         cut = ANNIV_TAIL.sub("", t)          # "... 25th Anniversary", "...: 25th Anniversary", "... - 25th Anniversary - Fest"
@@ -593,6 +593,33 @@ def studio_alias(title):
     t = clean_title(title)
     cut = STUDIO_PREFIX.sub("", t)
     return norm(cut) if cut != t and len(cut) >= 4 else None
+
+
+# Hand-made exceptions, one line per title as a theater spells it (lower case, single spaces). Keep each one commented:
+#   year   -> TMDB search is narrowed to that release year (two films with the same name)
+#   event  -> not a film: a recorded stage play etc. Card gets the "Event" label and NO TMDB match (so no borrowed poster/rating)
+# Add new lines here when the weekly anomaly report or the titles history shows a wrong or missing match.
+TITLE_EXCEPTIONS = {
+    "the host - 4k": {"year": "2006"},          # Bong Joon-ho's 4K re-release (11/20/2026); there is also a 2013 "The Host"
+    "the host (4k)": {"year": "2006"},
+    "giant - the play": {"event": True},        # filmed West End play, not the 1956 film "Giant"
+}
+
+
+def title_exception(title):
+    return TITLE_EXCEPTIONS.get(re.sub(r"\s+", " ", title.strip().lower()))
+
+
+def nice_case(g):
+    """A TMDB (or theater) title in ALL CAPS ("LA BOLA NEGRA") while a theater spells it normally: use the normal spelling.
+    Titles that are caps everywhere (acronyms, "WALL-E") stay as they are."""
+    t = g["title"]
+    if sum(c.isalpha() for c in t) < 4 or t != t.upper():
+        return
+    cands = [clean_title(r) for r in g.get("raws", ()) if norm(r) == norm(t)]
+    cands = [c for c in cands if c and c != c.upper()]
+    if cands:
+        g["title"] = max(sorted(cands), key=lambda c: sum(ch.isupper() for ch in c))
 
 
 # These theaters' pages cannot open one movie for our theater (their movie pages ask where you are), so the
@@ -646,6 +673,9 @@ def tmdb_by_title(title, year=None):
             alt = re.sub(r":?\s+part (one|1)$", "", queries[0], flags=re.I)
             if alt != queries[0]:
                 queries.append(alt)
+            by = re.sub(r"^dr\.?\s+seuss['\u2019]?s?\s+", "", queries[0], flags=re.I)
+            if by != queries[0]:
+                queries.append(by)
             if "&" in queries[0]:                  # "Planes, Trains & Automobiles" is "... and ..." on TMDB
                 queries.append(queries[0].replace("&", "and"))
             for q in queries:
@@ -737,7 +767,10 @@ def build_movies(showings, use_tmdb):
     groups = {}
     for s in showings:
         info = None
-        if use_tmdb and not skip_tmdb(s):
+        exc = title_exception(s["title"]) or {}
+        if exc.get("year") and not s.get("year"):
+            s = dict(s, year=exc["year"])
+        if use_tmdb and not skip_tmdb(s) and not exc.get("event"):
             info = tmdb_by_id(s["tmdb_id"]) if s["tmdb_id"] else tmdb_by_title(s["title"], s.get("year"))
             if info is None and s["tmdb_id"]:
                 info = tmdb_by_title(s["title"])
@@ -753,6 +786,7 @@ def build_movies(showings, use_tmdb):
                                         released=(info or {}).get("release_date") or "", year_hint=None,
                                         raw_title=s["title"], th_rt=None, th_genre=None, by_theater={}))
         g["year_hint"] = g["year_hint"] or s.get("year")
+        g["event"] = g.get("event") or bool(exc.get("event"))
         g.setdefault("raws", set()).add(s["title"])
         if ANNIV_ANY.search(s["title"]):
             g["anniv"] = True
@@ -797,7 +831,9 @@ def build_movies(showings, use_tmdb):
     for g in movies:  # small poster label: Event / Re-release <year>
         names = f'{g["raw_title"]} {g["title"]} {g["th_genre"] or ""}'
         g["label"] = None
-        if SPECIAL_SHOW.search(g["raw_title"]):
+        if g.get("event"):
+            g["label"] = "Event"
+        elif SPECIAL_SHOW.search(g["raw_title"]):
             g["label"] = "Special screening"
         elif EVENT_STRONG.search(names) or (not g["tmdb_id"] and EVENT_WEAK.search(names)) \
                 or re.search(r"\b(event|concert|opera)\b", g["th_genre"] or "", re.I):
@@ -808,6 +844,8 @@ def build_movies(showings, use_tmdb):
             g["label"] = f'Re-release <i>{g["year_hint"]}</i>'
         elif g.get("anniv") or g.get("edition"):   # "Nth Anniversary" / "4K" / "Remastered" in the theater's title, no release date known
             g["label"] = "Re-release"
+    for g in movies:
+        nice_case(g)
     for g in movies:  # no TMDB poster -> use the theater's own artwork
         if not g["poster"]:
             g["poster"] = next((g["alt_posters"][k] for k in ("festival", "cinemark", "regal", "pickford", "laquinta")
@@ -2247,6 +2285,7 @@ def write_problems(problems):
 
 
 ANOMALY_TAIL = re.compile(r"(\b\d+(st|nd|rd|th)\s*$)|\b(anniversary|reissue|re-issue|early access|remastered|restored|encore|4k|imax|dolby)\b", re.I)
+PROGRAM_WORDS = re.compile(r"\b(flashback cinema|movie clubhouse|movie club|classic series|kids? camp|summer movie)\b", re.I)
 ANOMALY_EDITION = re.compile(r"^\s*(\d+(st|nd|rd|th)|anniversary|reissue|re-issue|remastered|restored|4k|imax|dolby|early access|encore)\b", re.I)
 
 
@@ -2258,6 +2297,14 @@ def find_anomalies(movies, use_tmdb):
         t = g["title"]
         if ANOMALY_TAIL.search(t):
             out.append(f'"{t}": the title still has an edition tag (25th / Anniversary / 4K ...) - clean_title may need a new rule')
+    for g in movies:
+        t = g["title"]
+        if PROGRAM_WORDS.search(t):
+            out.append(f'"{t}": the title still has a theater program name (Flashback Cinema / Movie Clubhouse ...) - clean_title may need a new rule')
+        if sum(c.isalpha() for c in t) >= 4 and t == t.upper() and any(clean_title(r) != clean_title(r).upper() for r in g.get("raws", ())):
+            out.append(f'"{t}": ALL CAPS although a theater spells it normally')
+        if not g.get("poster"):
+            out.append(f'"{t}": no poster at all (TMDB and the theaters gave none) - the card shows a plain colored tile')
     norms = {}
     for g in movies:
         norms.setdefault(norm(g["title"]), []).append(g)
@@ -2308,6 +2355,7 @@ def write_titles_today(movies, anomalies, today):
             t = g["title"]
             recs.append({"title": t, "raws": sorted(g.get("raws") or [g.get("raw_title", t)]),
                          "theaters": sorted(g["by_theater"]), "tmdb": bool(g["tmdb_id"]),
+                         "tmdb_id": g["tmdb_id"], "year": (g.get("released") or "")[:4],
                          "label": re.sub(r"<[^>]+>", "", g.get("label") or "").strip(), "anomalies": [a for a in anomalies if t in a]})
         with open(TITLES_TODAY, "w", encoding="utf-8") as f:
             json.dump({"date": today, "titles": recs}, f, ensure_ascii=False, indent=1)
