@@ -20,10 +20,10 @@
   },
   "Aakasamlo Oka Tara": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Aakasamlo Oka Tara",
     "Aakasamlo Oka Tara (Telugu with English Subtitles)"
@@ -32,7 +32,25 @@
     "cinemark",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1322273,
+   "year": "2026"
+  },
+  "Addams Family Values": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-27",
+   "label": "Re-release 1993",
+   "last": "2026-11-27",
+   "raws": [
+    "Addams Family Values"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true,
+   "tmdb_id": 2758,
+   "year": "1993"
   },
   "Being Heumann": {
    "anomalies": [],
@@ -50,10 +68,10 @@
   },
   "Bitter Christmas": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Bitter Christmas"
    ],
@@ -61,7 +79,9 @@
     "festival",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1088548,
+   "year": "2026"
   },
   "Blade II": {
    "anomalies": [],
@@ -93,10 +113,10 @@
   },
   "Club Kid": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Club Kid"
    ],
@@ -106,7 +126,9 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1585239,
+   "year": "2026"
   },
   "Cowboys & Aliens": {
    "anomalies": [],
@@ -185,10 +207,10 @@
   },
   "Ebenezer": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Ebenezer"
    ],
@@ -199,28 +221,32 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1567605,
+   "year": "2026"
   },
   "Elf": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-26",
    "label": "Re-release 2003",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Elf"
    ],
    "theaters": [
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 10719,
+   "year": "2003"
   },
   "Elsinore": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Elsinore"
    ],
@@ -228,7 +254,9 @@
     "festival",
     "pickford"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1599230,
+   "year": "2026"
   },
   "Fjord": {
    "anomalies": [],
@@ -246,10 +274,10 @@
   },
   "Focker In-Law": {
    "anomalies": [],
-   "days": 3,
+   "days": 4,
    "first": "2026-11-24",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Focker In Law",
     "Focker In-Law"
@@ -261,14 +289,16 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1400336,
+   "year": "2026"
   },
   "Ghost Soldier": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Ghost Soldier"
    ],
@@ -278,7 +308,9 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1562642,
+   "year": "2026"
   },
   "Giant": {
    "anomalies": [],
@@ -314,24 +346,26 @@
   },
   "Gremlins 2: The New Batch": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-26",
    "label": "Re-release 1990",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Gremlins 2: The New Batch"
    ],
    "theaters": [
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 928,
+   "year": "1990"
   },
   "Hershey": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Hershey"
    ],
@@ -341,24 +375,47 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1461490,
+   "year": "2026"
   },
   "Hexed": {
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
+    "Disney's Hexed",
     "Hexed"
    ],
    "theaters": [
+    "cinemark",
+    "laquinta",
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1538497,
+   "year": "2026"
+  },
+  "How the Grinch Stole Christmas": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-27",
+   "label": "Re-release 2000",
+   "last": "2026-11-27",
+   "raws": [
+    "Dr. Seuss' How the Grinch Stole Christmas (2000) - Holiday Movie Clubhouse 2026"
+   ],
+   "theaters": [
+    "cinemark"
+   ],
+   "tmdb": true,
+   "tmdb_id": 8871,
+   "year": "2000"
   },
   "How to Rob a Bank": {
    "anomalies": [],
@@ -393,10 +450,10 @@
   },
   "I Play Rocky": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "I Play Rocky"
    ],
@@ -407,21 +464,25 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1286656,
+   "year": "2026"
   },
   "Jimmy": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Jimmy"
    ],
    "theaters": [
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1241478,
+   "year": "2026"
   },
   "LA BOLA NEGRA": {
    "anomalies": [],
@@ -439,12 +500,44 @@
    ],
    "tmdb": true
   },
+  "La Bola Negra": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-27",
+   "label": "",
+   "last": "2026-11-27",
+   "raws": [
+    "La Bola Negra"
+   ],
+   "theaters": [
+    "festival"
+   ],
+   "tmdb": true,
+   "tmdb_id": 1422041,
+   "year": "2026"
+  },
+  "National Lampoon's Christmas Vacation": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-27",
+   "label": "Re-release 1989",
+   "last": "2026-11-27",
+   "raws": [
+    "Flashback Cinema: National Lampoon's Christmas Vacation"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true,
+   "tmdb_id": 5825,
+   "year": "1989"
+  },
   "Paper Tiger": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Paper Tiger"
    ],
@@ -454,14 +547,16 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1381273,
+   "year": "2026"
   },
   "The Cat in the Hat": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "The Cat in the Hat"
    ],
@@ -471,7 +566,9 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1117898,
+   "year": "2026"
   },
   "The Dark Crystal": {
    "anomalies": [],
@@ -517,10 +614,10 @@
   },
   "The Hunger Games: Sunrise on the Reaping": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "The Hunger Games: Sunrise On The Reaping",
     "The Hunger Games: Sunrise on the Reaping",
@@ -533,7 +630,9 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1300968,
+   "year": "2026"
   },
   "The Only Living Pickpocket in New York": {
    "anomalies": [],
@@ -551,17 +650,19 @@
   },
   "The Polar Express": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-26",
    "label": "Re-release 2004",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "The Polar Express"
    ],
    "theaters": [
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 5255,
+   "year": "2004"
   },
   "The World's End": {
    "anomalies": [],
@@ -576,6 +677,22 @@
     "regal"
    ],
    "tmdb": true
+  },
+  "Waterworld": {
+   "anomalies": [],
+   "days": 1,
+   "first": "2026-11-27",
+   "label": "Re-release 1995",
+   "last": "2026-11-27",
+   "raws": [
+    "Waterworld"
+   ],
+   "theaters": [
+    "regal"
+   ],
+   "tmdb": true,
+   "tmdb_id": 9804,
+   "year": "1995"
   },
   "Wicker": {
    "anomalies": [],
@@ -593,10 +710,10 @@
   },
   "Wild Horse Nine": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "Wild Horse Nine"
    ],
@@ -607,7 +724,9 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 891621,
+   "year": "2026"
   },
   "Wildwood": {
    "anomalies": [],
@@ -640,10 +759,10 @@
   },
   "You Can See Everything": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-26",
+   "last": "2026-11-27",
    "raws": [
     "You Can See Everything"
    ],
@@ -653,8 +772,10 @@
     "pickford",
     "regal"
    ],
-   "tmdb": true
+   "tmdb": true,
+   "tmdb_id": 1765072,
+   "year": "2026"
   }
  },
- "updated": "2026-11-26"
+ "updated": "2026-11-27"
 }
