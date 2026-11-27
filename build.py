@@ -582,6 +582,18 @@ def norm(t):
     return re.sub(r"[^a-z0-9]+", "", clean_title(t).lower().replace("&", "and"))
 
 
+# "Disney's Hexed" at one theater, "Hexed" at another: the studio's name in front of the title is not part of the film's name
+STUDIO_PREFIX = re.compile(r"^(?:disney|pixar)(?:['\u2019]s)?\s+", re.I)
+
+
+def studio_alias(title):
+    """norm() of the title without a leading studio name ("Disney's Hexed" -> "hexed"), or None if it has none.
+    Only used to fold two cards that exist on the same day; no title is ever rewritten by it."""
+    t = clean_title(title)
+    cut = STUDIO_PREFIX.sub("", t)
+    return norm(cut) if cut != t and len(cut) >= 4 else None
+
+
 # These theaters' pages cannot open one movie for our theater (their movie pages ask where you are), so the
 # colored block opens the theater's page and a "text fragment" scrolls it to the movie's title and highlights it.
 # Browsers that do not know text fragments, or a title that is not found, simply show the top of the page.
@@ -754,8 +766,15 @@ def build_movies(showings, use_tmdb):
             g["alt_posters"].setdefault(s["theater"], s["poster"])
     # a title that TMDB did not recognise in one theater but did in another: fold it in
     by_norm = {norm(g["title"]): g for k, g in groups.items() if k[0] == "tmdb"}
+    for k, g in groups.items():      # a TMDB card whose own title carries the studio name ("Disney's Hexed") is also found without it
+        al = studio_alias(g["title"]) if k[0] == "tmdb" else None
+        if al:
+            by_norm.setdefault(al, g)
     for k in [k for k in groups if k[0] == "t"]:
         target = by_norm.get(k[1])
+        if not target:               # "Disney's Hexed" (no TMDB match) next to "Hexed" (matched) is one film
+            al = studio_alias(groups[k]["title"])
+            target = by_norm.get(al) if al else None
         if target:
             src = groups.pop(k)
             for th, shows in src["by_theater"].items():
@@ -930,6 +949,13 @@ h3{margin:0;font-size:.95rem;line-height:1.25}
 .times{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .t{background:var(--chip);color:var(--fg);text-decoration:none;font-size:.78rem;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t.past{opacity:.45;text-decoration:line-through}
+/* past showtimes folded behind one "N earlier" chip (the chips stay in the page, so the popup and the other views still see them) */
+.times.col .t.past{display:none}
+.times.col.open .t.past{display:inline-block}
+.times .eb{font:inherit;font-size:.78rem;line-height:inherit;padding:3px 8px;border-radius:999px;border:1px dashed var(--mut);background:transparent;color:var(--mut);cursor:pointer;white-space:nowrap}
+.times .eb .x2{display:none} .times.open .eb .x1{display:none} .times.open .eb .x2{display:inline}
+@media (hover:hover){.times .eb:hover{color:var(--fg)}}
+@media (max-width:700px){.times .eb{font-size:.74rem;padding:3px 6px}}
 .t[data-buy]:not(.past),.c[data-buy]:not(.past){cursor:pointer;transition:filter .12s}
 @media (hover:hover){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(.93);text-decoration:underline;text-underline-offset:2px}}
 @media (hover:hover) and (prefers-color-scheme:dark){.t[data-buy]:not(.past):hover,.c[data-buy]:not(.past):hover{filter:brightness(1.35)}}
@@ -1272,12 +1298,20 @@ JS = """
   var rolled=!stale && (day===d1);            /* past midnight: yesterday's "tomorrow" is today now */
   if(rolled){ var s=document.getElementById('daylabel'); if(s) s.textContent=B.dataset.d1nice; }
   var allOk=!rolled && ok.length>=+B.dataset.nth;
+  /* past showtimes of a theater: always folded behind one "N earlier" chip (tap to show them), upcoming ones stay in view */
+  var fold=function(a,n){
+    var b=document.createElement('button'); b.type='button'; b.className='eb'; b.setAttribute('aria-expanded','false');
+    b.innerHTML='<span class="x1">'+n+' earlier ›</span><span class="x2">hide earlier ‹</span>';
+    b.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); b.setAttribute('aria-expanded',a.classList.toggle('open')?'true':'false'); });
+    a.classList.add('col'); a.insertBefore(b,a.firstChild);
+  };
   if(!stale) cards.forEach(function(c){
     var upcoming=0, hadToday=0, tomorrow=0;
     c.querySelectorAll('.th').forEach(function(r){
       var a=r.querySelector('.times.d0'), b=r.querySelector('.times.d1'), up=0;
       if(rolled){ hide(a); a=b; b=null; if(a){ a.classList.remove('d1'); hide(a.querySelector('.lab')); } }
-      if(a){ a.querySelectorAll('.t').forEach(function(t){ hadToday++; if(+t.dataset.ts<now) t.classList.add('past'); else up++; }); }
+      if(a){ a.querySelectorAll('.t').forEach(function(t){ hadToday++; if(+t.dataset.ts<now) t.classList.add('past'); else up++; });
+        var pn=a.querySelectorAll('.t.past').length; if(pn) fold(a,pn); }
       r._today=a; r._tmrw=b;
       if(r.dataset.u1 && (rolled || (!up && b))) r.href=r.dataset.u1;
       if(b){ tomorrow+=b.querySelectorAll('.t').length; if(up) b.hidden=true; }
@@ -1762,8 +1796,8 @@ def seo_head(today):
             cities.append(c)
     city_txt = ", ".join(cities[:-1]) + " and " + cities[-1] if len(cities) > 1 else cities[0]
     title = "Movie Showtimes Today - Palm Springs & Coachella Valley"
-    desc = (f"Today's movie showtimes at {len(THEATERS)} theaters in {city_txt}. "
-            "Updated several times a day, with ratings and what's coming soon.")
+    desc = (f"Movie showtimes today and tomorrow in {city_txt}. "
+            "IMAX, D-BOX and XD, updated several times a day.")
     a = html.escape
     ld = {"@context": "https://schema.org", "@graph": [
         {"@type": "WebSite", "name": "In Theaters - Coachella Valley", "url": SITE_URL},
@@ -2185,6 +2219,10 @@ def find_anomalies(movies, use_tmdb):
         for b in keys[i + 1:]:
             if len(a) >= 6 and b.startswith(a) and ANOMALY_EDITION.match(re.sub(r"^[^0-9a-z]+", "", b[len(a):])):
                 out.append(f'possible duplicate: "{norms[a][0]["title"]}" and "{norms[b][0]["title"]}" (the same film with an edition tag?)')
+    for g in movies:
+        al = studio_alias(g["title"])
+        if al and al in norms and norms[al][0] is not g:
+            out.append(f'possible duplicate: "{norms[al][0]["title"]}" and "{g["title"]}" (studio name in front of the title?)')
     seen = {}
     for g in movies:
         if g.get("poster"):
