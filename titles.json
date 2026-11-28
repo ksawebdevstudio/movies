@@ -20,10 +20,10 @@
   },
   "Aakasamlo Oka Tara": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Aakasamlo Oka Tara",
     "Aakasamlo Oka Tara (Telugu with English Subtitles)"
@@ -38,10 +38,10 @@
   },
   "Addams Family Values": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-27",
    "label": "Re-release 1993",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Addams Family Values"
    ],
@@ -68,10 +68,10 @@
   },
   "Bitter Christmas": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Bitter Christmas"
    ],
@@ -113,10 +113,10 @@
   },
   "Club Kid": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Club Kid"
    ],
@@ -207,10 +207,10 @@
   },
   "Ebenezer": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Ebenezer"
    ],
@@ -227,10 +227,10 @@
   },
   "Elf": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-26",
    "label": "Re-release 2003",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Elf"
    ],
@@ -243,10 +243,10 @@
   },
   "Elsinore": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Elsinore"
    ],
@@ -274,10 +274,10 @@
   },
   "Focker In-Law": {
    "anomalies": [],
-   "days": 4,
+   "days": 5,
    "first": "2026-11-24",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Focker In Law",
     "Focker In-Law"
@@ -295,10 +295,10 @@
   },
   "Ghost Soldier": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Ghost Soldier"
    ],
@@ -362,10 +362,10 @@
   },
   "Hershey": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Hershey"
    ],
@@ -383,10 +383,10 @@
    "anomalies": [
     "1 card(s) without a TMDB match and without an Event/Re-release label (no rating): Disney's Hexed"
    ],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Disney's Hexed",
     "Hexed"
@@ -401,17 +401,35 @@
    "tmdb_id": 1538497,
    "year": "2026"
   },
-  "How the Grinch Stole Christmas": {
+  "Hoosiers": {
    "anomalies": [],
    "days": 1,
-   "first": "2026-11-27",
-   "label": "Re-release 2000",
-   "last": "2026-11-27",
+   "first": "2026-11-28",
+   "label": "Re-release 1986",
+   "last": "2026-11-28",
    "raws": [
-    "Dr. Seuss' How the Grinch Stole Christmas (2000) - Holiday Movie Clubhouse 2026"
+    "Hoosiers"
    ],
    "theaters": [
-    "cinemark"
+    "regal"
+   ],
+   "tmdb": true,
+   "tmdb_id": 5693,
+   "year": "1986"
+  },
+  "How the Grinch Stole Christmas": {
+   "anomalies": [],
+   "days": 2,
+   "first": "2026-11-27",
+   "label": "Re-release 2000",
+   "last": "2026-11-28",
+   "raws": [
+    "Dr. Seuss' How the Grinch Stole Christmas (2000) - Holiday Movie Clubhouse 2026",
+    "How the Grinch Stole Christmas - 35mm"
+   ],
+   "theaters": [
+    "cinemark",
+    "regal"
    ],
    "tmdb": true,
    "tmdb_id": 8871,
@@ -450,10 +468,10 @@
   },
   "I Play Rocky": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "I Play Rocky"
    ],
@@ -470,10 +488,10 @@
   },
   "Jimmy": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Jimmy"
    ],
@@ -502,10 +520,10 @@
   },
   "La Bola Negra": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-27",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "La Bola Negra"
    ],
@@ -518,10 +536,10 @@
   },
   "National Lampoon's Christmas Vacation": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-27",
    "label": "Re-release 1989",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Flashback Cinema: National Lampoon's Christmas Vacation"
    ],
@@ -534,10 +552,10 @@
   },
   "Paper Tiger": {
    "anomalies": [],
-   "days": 5,
+   "days": 6,
    "first": "2026-11-23",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Paper Tiger"
    ],
@@ -553,10 +571,10 @@
   },
   "The Cat in the Hat": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "The Cat in the Hat"
    ],
@@ -614,10 +632,10 @@
   },
   "The Hunger Games: Sunrise on the Reaping": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "The Hunger Games: Sunrise On The Reaping",
     "The Hunger Games: Sunrise on the Reaping",
@@ -650,10 +668,10 @@
   },
   "The Polar Express": {
    "anomalies": [],
-   "days": 2,
+   "days": 3,
    "first": "2026-11-26",
    "label": "Re-release 2004",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "The Polar Express"
    ],
@@ -680,10 +698,10 @@
   },
   "Waterworld": {
    "anomalies": [],
-   "days": 1,
+   "days": 2,
    "first": "2026-11-27",
    "label": "Re-release 1995",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Waterworld"
    ],
@@ -710,10 +728,10 @@
   },
   "Wild Horse Nine": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "Wild Horse Nine"
    ],
@@ -759,10 +777,10 @@
   },
   "You Can See Everything": {
    "anomalies": [],
-   "days": 6,
+   "days": 7,
    "first": "2026-11-22",
    "label": "",
-   "last": "2026-11-27",
+   "last": "2026-11-28",
    "raws": [
     "You Can See Everything"
    ],
@@ -777,5 +795,5 @@
    "year": "2026"
   }
  },
- "updated": "2026-11-27"
+ "updated": "2026-11-28"
 }
